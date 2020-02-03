@@ -22,21 +22,37 @@ mykilobotenvironment::mykilobotenvironment(QObject *parent) : KilobotEnvironment
     // define environment:
     // call any functions to setup features in the environment
     reset();
-
-
 }
 
 void mykilobotenvironment::reset() {
+    qDebug() << QString("in reset");
+
     this->time = 0;
     this->minTimeBetweenTwoMessages = 0;
     this->ongoingRuntimeIdentification = false;
 
+    // measurements expressed in mm
     resources.clear();
     kilobots_states.clear();
     kilobots_positions.clear();
+
+    QVector<Area> oth_areas;
+    double area_radius = 170;
+    Resource a(0, 1000, area_radius, 0.1, oth_areas);
+    std::cout << oth_areas.size() << std::endl;
+    Resource b(1, 1000, area_radius, 0.1, oth_areas);
+        std::cout << oth_areas.size() << std::endl;
+    Resource c(2, 1000, area_radius, 0.1, oth_areas);
+        std::cout << oth_areas.size() << std::endl;
+
+    resources.push_back(a);
+    resources.push_back(b);
+    resources.push_back(c);
 }
 
 void mykilobotenvironment::update() {
+    qDebug() << QString("in update");
+
     // get all areas in a single array to avoid placing duplicate
     QVector<Area> allAreas;
     for(Resource r : resources) {
@@ -47,14 +63,15 @@ void mykilobotenvironment::update() {
 
     // update resources and areas
     for(Resource& r : resources) {
-        r.doStep(kilobots_positions, kilobots_states, kilobots_colours, allAreas, 0.5);
+        r.doStep(kilobots_positions, kilobots_states, kilobots_colours, allAreas, 1000);
     }
 }
 
 // generate virtual sensors reading and send it to the kbs (same as for ARGOS)
 void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
-    // update local arrays
+    qDebug() << QString("in update virtual sensors");
 
+    // update local arrays
     // update kilobot position
     kilobot_id k_id = kilobot_entity.getID();
     this->kilobots_positions[k_id] = kilobot_entity.getPosition();

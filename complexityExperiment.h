@@ -58,14 +58,14 @@
  */
 class KiloLog {
 public:
+    KiloLog() {}
+    KiloLog(kilobot_id id, QPointF position, double orientation, kilobot_colour colour) :
+        id(id), position(position), orientation(orientation), colour(colour) {}
+
     kilobot_id id;          // unique kilobot id
     QPointF position;       // kilobot position on the plane
     double orientation;     // kilobot orientation
     kilobot_colour colour;  // kilobot led colour
-
-    KiloLog() {}
-    KiloLog(kilobot_id id, QPointF position, double orientation, kilobot_colour colour) :
-        id(id), position(position), orientation(orientation), colour(colour) {}
 
     /** Update all log values */
     void updateAllValues(kilobot_id id, QPointF position, double orientation, kilobot_colour colour) {
@@ -119,18 +119,38 @@ public slots:
         logExp = toggle;
     }
 
-    void setResourceAPopulation(int numOfAreas);  // set resource A population as number of areas
-    void setResourceBPopulation(int numOfAreas);  // set resource B population as number of areas
-    void setResourceCPopulation(int numOfAreas);  // set resource C population as number of areas
-    void setResourceAEta(double eta); // set resource A growth rate
-    void setResourceBEta(double eta); // set resource B growth rate
-    void setResourceCEta(double eta); // set resource C growth rate
-    void setResourceAK(int k);   // set resource A population cap as number of areas
-    void setResourceBK(int k);   // set resource B population cap as number of areas
-    void setResourceCK(int k);   // set resource C population cap as number of areas
-    void setResourceAUmin(double umin);    // set resource A minimum population for exploitation as percentage
-    void setResourceBUmin(double umin);    // set resource B minimum population for exploitation as percentage
-    void setResourceCUmin(double umin);    // set resource C minimum population for exploitation as percentage
+    // set resource growth rate
+    inline void setResourceAEta(double eta) {
+        complexityEnvironment.resources[0].eta = eta;
+    }
+    inline void setResourceBEta(double eta) {
+        complexityEnvironment.resources[1].eta = eta;
+    }
+    inline void setResourceCEta(double eta) {
+        complexityEnvironment.resources[2].eta = eta;
+    }
+
+    // set resource C population cap as number of areas
+    inline void setResourceAK(int k) {
+        complexityEnvironment.resources[0].k = k;
+    }
+    inline void setResourceBK(int k) {
+        complexityEnvironment.resources[1].k = k;
+    }
+    inline void setResourceCK(int k) {
+        complexityEnvironment.resources[2].k = k;
+    }
+
+    // set resource minimum population for exploitation as percentage
+    inline void setResourceAUmin(double umin) {
+        complexityEnvironment.resources[0].umin = umin;
+    }
+    inline void setResourceBUmin(double umin) {
+        complexityEnvironment.resources[1].umin = umin;
+    }
+    inline void setResourceCUmin(double umin) {
+        complexityEnvironment.resources[2].umin = umin;
+    }
 
     QColor GetFloorColor(int x, int y);
 
@@ -139,7 +159,7 @@ private:
     void setupInitialKilobotState(Kilobot kilobot_entity);
 
     void setupEnvironments();
-    void plotEnvironments();
+    void plotEnvironment();
 
     void printTotalExploitaion();
 
@@ -154,8 +174,10 @@ private:
     QTextStream log_stream;
 
     // GUI objects
+
+    QSpinBox *pop_spina, *pop_spinb, *pop_spinc;
     QDoubleSpinBox *eta_spina, *eta_spinb, *eta_spinc;
-    QDoubleSpinBox *k_spina, *k_spinb, *k_spinc;
+    QSpinBox *k_spina, *k_spinb, *k_spinc;
     QDoubleSpinBox *umin_spina, *umin_spinb, *umin_spinc;
 
     // kilobots objects

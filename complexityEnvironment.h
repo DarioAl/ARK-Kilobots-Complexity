@@ -42,7 +42,7 @@ public:
     int ArenaX, ArenaY;
     bool ongoingRuntimeIdentification;
 
-
+    void addResourcesTo(int resource_index, int numOfAreas);
 
 // signals and slots are used by qt to signal state changes to objects
 signals:

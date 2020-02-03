@@ -30,6 +30,12 @@ extern "C" COMPLEXITYEXPERIMENTEXPSHARED_EXPORT KilobotExperiment *createExpt()
 
 /* setup the environment */
 mykilobotexperiment::mykilobotexperiment() {
+    qDebug() << QString("in constructor");
+
+    // Initialize seed
+    QDateTime cd = QDateTime::currentDateTime();
+    qsrand(cd.toTime_t());
+
     // setup the environment here
     connect(&complexityEnvironment,SIGNAL(transmitKiloState(kilobot_message)), this, SLOT(signalKilobotExpt(kilobot_message)));
     this->serviceInterval = 100; // timestep expressed in ms
@@ -37,6 +43,8 @@ mykilobotexperiment::mykilobotexperiment() {
 
 /* create the GUI as a separate frame in the main ARK window */
 QWidget *mykilobotexperiment::createGUI() {
+    qDebug() << QString("in create gui");
+
     QFrame *frame = new QFrame;
     frame->setLayout(lay);
 
@@ -60,20 +68,23 @@ QWidget *mykilobotexperiment::createGUI() {
     QFormLayout *layoutResourceA = new QFormLayout;
     QGroupBox *resourceAParameters = new QGroupBox(tr("Resource A"));
     resourceAParameters->setLayout(layoutResourceA);
+
     // eta
     eta_spina = new QDoubleSpinBox();
     eta_spina->setMinimum(0);
-    eta_spina->setMaximum(0.1);
-    eta_spina->setSingleStep(0.001);
+    eta_spina->setMaximum(1);
+    eta_spina->setSingleStep(0.005);
     eta_spina->setValue(complexityEnvironment.resources.at(0).eta);
     layoutResourceA->addRow(new QLabel(tr("eta")), eta_spina);
+
     // k
-    k_spina = new QDoubleSpinBox();
+    k_spina = new QSpinBox();
     k_spina->setMinimum(0);
-    k_spina->setMaximum(25);
+    k_spina->setMaximum(50);
     k_spina->setSingleStep(1);
     k_spina->setValue(complexityEnvironment.resources.at(0).k);
     layoutResourceA->addRow(new QLabel(tr("k")), k_spina);
+
     // umin
     umin_spina = new QDoubleSpinBox();
     umin_spina->setMinimum(0);
@@ -91,17 +102,18 @@ QWidget *mykilobotexperiment::createGUI() {
     QFormLayout *layoutResourceB = new QFormLayout;
     QGroupBox *resourceBParameters = new QGroupBox(tr("Resource B"));
     resourceBParameters->setLayout(layoutResourceB);
+
     // eta
     eta_spinb = new QDoubleSpinBox();
     eta_spinb->setMinimum(0);
-    eta_spinb->setMaximum(0.1);
-    eta_spinb->setSingleStep(0.001);
+    eta_spinb->setMaximum(1);
+    eta_spinb->setSingleStep(0.005);
     eta_spinb->setValue(complexityEnvironment.resources.at(1).eta);
     layoutResourceB->addRow(new QLabel(tr("eta")), eta_spinb);
     // k
-    k_spinb = new QDoubleSpinBox();
+    k_spinb = new QSpinBox();
     k_spinb->setMinimum(0);
-    k_spinb->setMaximum(25);
+    k_spinb->setMaximum(50);
     k_spinb->setSingleStep(1);
     k_spinb->setValue(complexityEnvironment.resources.at(1).k);
     layoutResourceB->addRow(new QLabel(tr("k")), k_spinb);
@@ -122,17 +134,18 @@ QWidget *mykilobotexperiment::createGUI() {
     QFormLayout *layoutResourceC = new QFormLayout;
     QGroupBox *resourceCParameters = new QGroupBox(tr("Resource C"));
     resourceCParameters->setLayout(layoutResourceC);
+
     // eta
     eta_spinc = new QDoubleSpinBox();
     eta_spinc->setMinimum(0);
-    eta_spinc->setMaximum(0.1);
-    eta_spinc->setSingleStep(0.001);
+    eta_spinc->setMaximum(1);
+    eta_spinc->setSingleStep(0.005);
     eta_spinc->setValue(complexityEnvironment.resources.at(2).eta);
     layoutResourceC->addRow(new QLabel(tr("eta")), eta_spinc);
     // k
-    k_spinc = new QDoubleSpinBox();
+    k_spinc = new QSpinBox();
     k_spinc->setMinimum(0);
-    k_spinc->setMaximum(25);
+    k_spinc->setMaximum(50);
     k_spinc->setSingleStep(1);
     k_spinc->setValue(complexityEnvironment.resources.at(2).k);
     layoutResourceC->addRow(new QLabel(tr("k")), k_spinc);
@@ -145,18 +158,17 @@ QWidget *mykilobotexperiment::createGUI() {
     layoutResourceC->addRow(new QLabel(tr("umin")), umin_spinc);
     lay->addWidget(resourceCParameters);
 
-    connect(eta_spina, SIGNAL(valueChanged(double)),this, SLOT(setDifRate(double)));
-    connect(eta_spinb, SIGNAL(valueChanged(double)),this, SLOT(setDifRate(double)));
-    connect(eta_spinc, SIGNAL(valueChanged(double)),this, SLOT(setDifRate(double)));
+    connect(eta_spina, SIGNAL(valueChanged(double)),this, SLOT(setResourceAEta(double)));
+    connect(eta_spinb, SIGNAL(valueChanged(double)),this, SLOT(setResourceBEta(double)));
+    connect(eta_spinc, SIGNAL(valueChanged(double)),this, SLOT(setResourceCEta(double)));
 
-    connect(k_spina, SIGNAL(valueChanged(double)),this, SLOT(setEvapRate(double)));
-    connect(k_spinb, SIGNAL(valueChanged(double)),this, SLOT(setEvapRate(double)));
-    connect(k_spinc, SIGNAL(valueChanged(double)),this, SLOT(setEvapRate(double)));
+    connect(k_spina, SIGNAL(valueChanged(int)),this, SLOT(setResourceAK(int)));
+    connect(k_spinb, SIGNAL(valueChanged(int)),this, SLOT(setResourceBK(int)));
+    connect(k_spinc, SIGNAL(valueChanged(int)),this, SLOT(setResourceCK(int)));
 
-
-    connect(umin_spina, SIGNAL(valueChanged(double)),this, SLOT(setQuantityRate(double)));
-    connect(umin_spinb, SIGNAL(valueChanged(double)),this, SLOT(setQuantityRate(double)));
-    connect(umin_spinc, SIGNAL(valueChanged(double)),this, SLOT(setQuantityRate(double)));
+    connect(umin_spina, SIGNAL(valueChanged(double)),this, SLOT(setResourceAUmin(double)));
+    connect(umin_spinb, SIGNAL(valueChanged(double)),this, SLOT(setResourceBUmin(double)));
+    connect(umin_spinc, SIGNAL(valueChanged(double)),this, SLOT(setResourceCUmin(double)));
 
     connect(saveImages_ckb, SIGNAL(toggled(bool)),this, SLOT(toggleSaveImages(bool)));
     connect(logExp_ckb, SIGNAL(toggled(bool)),this, SLOT(toggleLogExp(bool)));
@@ -166,6 +178,8 @@ QWidget *mykilobotexperiment::createGUI() {
 }
 
 void mykilobotexperiment::initialise(bool isResume) {
+    //qDebug() << QString("in initialise");
+
     // generate the environments
     setupEnvironments();
 
@@ -231,6 +245,8 @@ void mykilobotexperiment::stopExperiment() {
 }
 
 void mykilobotexperiment::run() {
+    //qDebug() << QString("in run");
+
     this->time += 0.1; // 10 ms
 
     // update environment
@@ -250,7 +266,7 @@ void mykilobotexperiment::run() {
         clearDrawingsOnRecordedImage();
 
         // plot updated environment
-        plotEnvironments();
+        plotEnvironment();
     }
 
     // twice per second save image and log
@@ -273,21 +289,34 @@ void mykilobotexperiment::run() {
 }
 
 void mykilobotexperiment::setupInitialKilobotState(Kilobot kilobot_entity) {
-    // assigne all kilobot to environment complexity
-    this->setCurrentKilobotEnvironment(&complexityEnvironment);
+    //qDebug() << QString("in setup init kilobot state");
 
+    // assign all kilobot to environment complexity
+    this->setCurrentKilobotEnvironment(&complexityEnvironment);
     kilobot_id k_id = kilobot_entity.getID();
 
     // create a necessary list and variable for correct message timing
-    if(k_id > kilobots.size()-1) {
-        complexityEnvironment.lastSent.resize(k_id+1);
-        // complexityEnvironment.isPrinting.resize(k_id+1);
-        complexityEnvironment.kilobots_positions.resize(k_id+1);
-        complexityEnvironment.kilobots_states.resize(k_id+1);
+    if(k_id+1 > kilobots.size()) {
         kilobots.resize(k_id+1);
     }
 
+    // this are used to solve a bug causing the app to crash after resetting
+    if(complexityEnvironment.lastSent.size() < k_id+1) {
+        complexityEnvironment.lastSent.resize(k_id+1);
+    }
+    if(complexityEnvironment.kilobots_positions.size() < k_id+1) {
+        complexityEnvironment.kilobots_positions.resize(k_id+1);
+    }
+    if(complexityEnvironment.kilobots_states.size() < k_id+1) {
+        complexityEnvironment.kilobots_states.resize(k_id+1);
+    }
+    if(complexityEnvironment.kilobots_colours.size() < k_id+1) {
+        complexityEnvironment.kilobots_colours.resize(k_id+1);
+    }
+
+
     complexityEnvironment.lastSent[k_id] = complexityEnvironment.minTimeBetweenTwoMessages;
+
     // TODO initialize kilobots location correctly
     complexityEnvironment.kilobots_positions[k_id] = kilobot_entity.getPosition();   // 255 empty space
     complexityEnvironment.kilobots_states[k_id] = 255;    // 255 is uncommitted
@@ -310,6 +339,8 @@ void mykilobotexperiment::setupInitialKilobotState(Kilobot kilobot_entity) {
 }
 
 void mykilobotexperiment::updateKilobotState(Kilobot kilobotCopy) {
+    //qDebug() << QString("in update kilobot state");
+
     // update values for logging
     if(logExp && (qRound(time*10.0)%5 == 0)) {
         kilobot_id k_id = kilobotCopy.getID();
@@ -321,10 +352,14 @@ void mykilobotexperiment::updateKilobotState(Kilobot kilobotCopy) {
 }
 
 void mykilobotexperiment::setupEnvironments() {
+    //qDebug() << QString("in setup env");
+
     complexityEnvironment.reset();
 }
 
 QColor mykilobotexperiment::GetFloorColor(int track_x, int track_y) {
+    //qDebug() << QString("in get floor color");
+
     QColor floorColour = Qt::white; // no resource
     // paint the resources
     for(int i=0; i< complexityEnvironment.resources.size(); i++) {
@@ -343,12 +378,23 @@ QColor mykilobotexperiment::GetFloorColor(int track_x, int track_y) {
     return floorColour;
 }
 
-void mykilobotexperiment::plotEnvironments() {
+void mykilobotexperiment::plotEnvironment() {
+    //qDebug() << QString("in plot env");
+
+    drawCircle(QPointF(1000,1000), 13, QColor(Qt::yellow), 26, "", true);
+    drawCircle(QPointF(1000,1000), 1013, QColor(Qt::yellow), 26, "", true);
+
     // print areas as circles
     for(int i=0; i<complexityEnvironment.resources.size(); i++) {
         Resource r = complexityEnvironment.resources.at(i);
         for(const Area& a : r.areas) {
-            drawCircle(a.position, a.radius, r.colour, 3, "", false);
+            char apop[2];
+            sprintf(apop, "%d", a.population);
+            drawCircle(a.position, a.radius, r.colour, 10, apop, true);
+
+            if(this->saveImages) {
+                drawCircleOnRecordedImage(a.position, a.radius, r.colour, 10, apop);
+            }
         }
     }
 }

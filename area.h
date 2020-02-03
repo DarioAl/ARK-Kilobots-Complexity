@@ -45,7 +45,7 @@ public:
     /* constructor */
     Area() : type(0), id(0), position(QPointF(0,0)), radius(0), exploitation_type("linear") {}
 
-    Area(uint type, uint id, const QPointF& position, double radius, std::string exploitation_type) :
+    Area(uint type, uint id, QPointF position, double radius, std::string exploitation_type) :
         type(type), id(id), position(position), radius(radius), exploitation_type(exploitation_type) {
         this->kilobots_in_area = 0;
         this->population = BASE_POP;

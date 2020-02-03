@@ -23,7 +23,7 @@
 #include <QPointF>
 #include <QtMath>
 
-#define ETA 0.05
+#define ETA 0.005
 #define K 25
 #define UMIN 0.25
 
@@ -46,7 +46,7 @@ public:
     double area_radius;   // the radius of the circle
     uint seq_areas_id; // used to sequentially assign ids to areas
     std::vector<Area> areas; /* areas of the resource */
-    uint population; /* Total resource population from0 to k*/
+    double population; /* Total resource population from 0 to 1 */
 
     /************************************/
     /* area exploitation function       */
@@ -56,29 +56,35 @@ public:
     /* constructor */
     inline Resource() {
         this->type = 0;
-        this->colour = Qt::red;
-        this->population = 0;
-        this->eta = 0.05;
-        this->k = 25;
-        this->umin = 0.25;
-        this->area_radius = 0.035;
-        this->seq_areas_id = 0;
-    }
-
-    Resource(uint type, double area_radius, double population) {
-        this->type = type;
-        this->population = population;
+        this->colour = QColor(Qt::red);
+        this->population = 0.0;
         this->eta = ETA;
         this->k = K;
         this->umin = UMIN;
+        this->area_radius = 35;
+        this->seq_areas_id = 0;
+
+        re.seed(qrand());
+    }
+
+    Resource(uint type, double arena_radius, double area_radius, double population, QVector<Area>& oth_areas) {
+        this->type = 0;
+        this->eta = ETA;
+        this->k = K;
+        this->umin = UMIN;
+        this->population = population;
         this->area_radius = area_radius;
         this->seq_areas_id = 0;
         if(type==0)
-            this->colour = Qt::red;
+            this->colour = QColor(Qt::red);
         else if(type==1)
-            this->colour = Qt::green;
+            this->colour = QColor(Qt::green);
         else if(type==2)
-            this->colour = Qt::blue;
+            this->colour = QColor(Qt::blue);
+
+        re.seed(qrand());
+
+        generate(oth_areas, arena_radius, k*this->population);
     }
 
     /* destructor */
@@ -87,46 +93,50 @@ public:
    /*
    * generate areas for the resource by taking into account all other areas positions
    */
-    void generate(const QVector<Area>& oth_areas, double arena_radius, uint num_of_areas) {
-        std::vector<Area> all_areas;
-        all_areas.insert(all_areas.end(), oth_areas.begin(), oth_areas.end());
-        all_areas.insert(all_areas.end(), this->areas.begin(), this->areas.end());
-
-        QPointF pos;
-        uint tries = 0;         // placement try
+    void generate(QVector<Area>& oth_areas, double arena_radius, uint num_of_areas) {
+        std::cout << "asking to generate " << num_of_areas << std::endl;
+        uint tries = 0;         // placement tries
         uint maxTries = 9999;   // max placement tries
 
         for(uint i=0; i<num_of_areas; i++) {
             for(tries=0; tries <= maxTries; tries++) {
+                QPointF pos;
                 // find a possible placement inside the arena
-                do {
-                    double rand_angle = getRandDouble(M_PI, -M_PI);
-                    double rand_displacement_x = getRandInt(0, arena_radius-area_radius/2);
-                    double rand_displacement_y = getRandInt(0, arena_radius-area_radius/2);
+                double rand_angle = getRandDouble(0, 2*M_PI);
+                double rand_displacement_x = getRandDouble(0, arena_radius);
+                double rand_displacement_y = getRandDouble(0, arena_radius);
+                pos.setX(rand_displacement_x*cos(rand_angle));
+                pos.setY(rand_displacement_y*sin(rand_angle));
+                // translate to center w.r.t. the image
+                pos.rx()+=1000;
+                pos.ry()+=1000;
 
-                    pos = QPoint(rand_displacement_x*cos(rand_angle),
-                                    rand_displacement_y*sin(rand_angle));
-                } while(SquaredDistance(pos.x(),0,pos.y(),0) < pow(arena_radius-area_radius/2,2));
-
+                // find a possible placement on empty space
                 bool duplicate = false;
-                for(const Area& an_area : all_areas) {
-                    duplicate = SquaredDistance(an_area.position.x(),pos.x(),an_area.position.y(),pos.y()) <= pow(area_radius*2,2);
-                    if(duplicate)
+                for(const Area& an_area : oth_areas) {
+                    // greater than diameter plus thickness of the drawing
+                    double distance = sqrt(pow(an_area.position.x()-pos.x(),2)+pow(an_area.position.y()-pos.y(),2));
+                    duplicate = (bool) (distance < area_radius*2.2);
+
+                    if(duplicate) {
                         break;
+                    }
                 }
 
                 if(!duplicate) {
                     Area new_area(this->type, seq_areas_id, pos, area_radius, exploitation);
-                    // add new area to the list of all areas for further comparisons
-                    all_areas.push_back(new_area);
+                    seq_areas_id++;
                     // save new area for simulation
                     areas.push_back(new_area);
+                    // add to oth areas for other areas generation
+                    oth_areas.push_back(new_area);
                     break;
                 }
 
                 // too many tries, there is no valid spot
                 if(tries >= maxTries-1) {
                      std::cout << "ERROR while placing a new area. No valid spot has been found." << std::endl;
+                     exit(-1);
                 }
 
             }
@@ -141,18 +151,33 @@ public:
    * @return true if a specific umin value is reached
    */
     bool doStep(const QVector<QPointF>& kilobot_positions, const QVector<uint8_t>& kilobot_states,
-                const QVector<QColor>& kilobot_colors, const QVector<Area>& oth_areas, double arena_radius) {
+                const QVector<QColor>& kilobot_colors, QVector<Area>& oth_areas, double arena_radius) {
         // update kilobots positions in the areas, compute only for those kilobots with the correct state
         for(int i=0; i<kilobot_positions.size(); i++) {
-            if(kilobot_states.at(i) == this->type && kilobot_colors.at(i) == lightColour::GREEN) {
+            //if(kilobot_states.at(i) == this->type && kilobot_colors.at(i) == lightColour::GREEN) {
                 // the kilobot is working on the area
                 // find and update it
                 for(Area& area : areas) {
-                    if(SquaredDistance(kilobot_positions.at(i).x(),area.position.x(),kilobot_positions.at(i).y(),area.position.y()) < pow(area_radius, 2)) {
+                    QPointF kbp = kilobot_positions.at(i);
+                    QPointF ap = area.position;
+                    if(pow(kbp.x()-ap.x(),2)+pow(kbp.y()-ap.y(),2) < pow(area_radius, 2)) {
                         area.kilobots_in_area++;
+                        std::cout << "there is one kb in the area" << std::endl;
+                        // TODO activate the kb and the leds and check if the logic works
+                        // if it works fuck this shit its done!
                         break;
                     }
                 }
+            //}
+        }
+
+        // check if the value of k has been changed from the GUI and if any
+        // check if there are more areas than allowed and remove those in excess
+        if(areas.size() > population*k) {
+            uint diff = areas.size()-population*k;
+            while(diff) {
+                areas.pop_back();
+                diff--;
             }
         }
 
@@ -162,41 +187,36 @@ public:
             if(it->doStep()) {
                 // delete if do step return true
                 it = areas.erase(it);
-                population = areas.size();
+                population = areas.size()/k;
             }
             // else increase iterator
             ++it;
         }
 
         // apply growth
-        population += population*eta*(1-population/k);
+        population += population*eta*(1-population);
 
         // regenerate areas
-        uint diff = floor(population) - areas.size();
+        uint diff = double(k)*population-areas.size();
         if(diff>0) {
             this->generate(oth_areas, arena_radius, diff);
         }
 
-        return population < population*umin;
+        return population < umin;
     }
 
 private:
+    unsigned int seed;
+    std::default_random_engine re;
+
     int getRandInt(int min, int max) {
-        unsigned int seed = static_cast<unsigned>(qrand());
-        std::mt19937 gen(seed);
         std::uniform_int_distribution<> uid(min, max);
-        return uid(gen);
+        return uid(re);
     }
 
-    int getRandDouble(double min, double max) {
-        unsigned int seed = static_cast<unsigned>(qrand());
-        std::mt19937 gen(seed);
-        std::uniform_int_distribution<> uid(min, max);
-        return uid(gen);
-    }
-
-    double SquaredDistance(double x1, double x2, double y1, double y2) {
-        return pow(x1-x2,2) + pow(y1-y2,2);
+    double getRandDouble(double min, double max) {
+        std::uniform_real_distribution<double> urd(min, max);
+        return urd(re);
     }
 };
 #endif // RESOURCES_H
