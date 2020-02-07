@@ -8,6 +8,7 @@
 #include "kilobot.h"
 
 #include <QVector>
+#include <QVector2D>
 #include <QLineF>
 #include <QDebug>
 #include <QtMath>
@@ -115,26 +116,25 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
 
         // create and fill the message
         kilobot_message message;
-        message.id = k_id;
-        message.type = 0; // 0 is used for arena2kb messages while 1 for kb2kb message
+        message.type = 0; // 0 is used for aren, 1 for message
 
-        // TODO check how to pack the messages
-        message.data = kilobots_states[k_id];
-        //message.data[0] = k_id; // send current kb id
-        //message.data[1] = kilobots_states.at(k_id); // send current kb arena state
-        //if(kilobots_states.at(k_id) != 255) {
-        //    message.data[2] = resources.at(kilobots_states.at(k_id).umin);  // if over a resource send resource umin
-        //}
+        message.data[0] = k_id; // send current kb id
+        message.data[1] = kilobots_states.at(k_id); // send current kb arena state
+        if(kilobots_states.at(k_id) != 255) {
+            message.data[2] = resources.at(kilobots_states.at(k_id)).umin;  // if over a resource send resource umin
+        }
 
         // send distance from the center in percentage  and relative bearing
-//        double orient_degrees = qRadiansToDegrees(qAtan2(-kilobot_entity.getVelocity().y(), kilobot_entity.getVelocity().x()));
-//        QVector2D kb_orientation(1, orient_degrees);
-//        QVector2D kb_position(this->kilobots_positions[k_id].x(), this->kilobots_positions[k_id].y());
-//        double distance_from_centre = sqrt(pow(kb_position.x(),2)+pow(kb_position.y(),2));
+        double orient_degrees = qRadiansToDegrees(qAtan2(-kilobot_entity.getVelocity().y(), kilobot_entity.getVelocity().x()));
+        QVector2D kb_orientation(1, orient_degrees);
+        QVector2D kb_position(this->kilobots_positions[k_id].x(), this->kilobots_positions[k_id].y());
+        kb_orientation.normalize();
+        kb_position.normalize();
+        double distance_from_centre = sqrt(pow(kb_position.x(),2)+pow(kb_position.y(),2));
         // get kb the orientation
-//        double turning_angle = M_PI	* kb_orientation.normalize().dotProduct(kb_position.normalize());
-        // message.data[3] = (uint8_t) distance_from_centre*100;
-        // message.data[4] = (uint8_t) turning_angle*10;
+        double turning_angle = M_PI	* QVector2D::dotProduct(kb_orientation,kb_position);
+        message.data[3] = (uint8_t) distance_from_centre*100;
+        message.data[4] = (uint8_t) turning_angle*10;
 
         // send it
         emit transmitKiloState(message);

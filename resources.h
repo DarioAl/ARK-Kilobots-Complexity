@@ -154,7 +154,7 @@ public:
                 const QVector<QColor>& kilobot_colors, QVector<Area>& oth_areas, double arena_radius) {
         // update kilobots positions in the areas, compute only for those kilobots with the correct state
         for(int i=0; i<kilobot_positions.size(); i++) {
-            //if(kilobot_states.at(i) == this->type && kilobot_colors.at(i) == lightColour::GREEN) {
+            if(kilobot_states.at(i) == this->type && kilobot_colors.at(i) == lightColour::GREEN) {
                 // the kilobot is working on the area
                 // find and update it
                 for(Area& area : areas) {
@@ -168,7 +168,7 @@ public:
                         break;
                     }
                 }
-            //}
+            }
         }
 
         // check if the value of k has been changed from the GUI and if any

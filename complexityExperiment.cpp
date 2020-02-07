@@ -389,7 +389,7 @@ void mykilobotexperiment::plotEnvironment() {
         Resource r = complexityEnvironment.resources.at(i);
         for(const Area& a : r.areas) {
             char apop[2];
-            sprintf(apop, "%d", a.population);
+            sprintf(apop, "%d", (int)a.population);
             drawCircle(a.position, a.radius, r.colour, 10, apop, true);
 
             if(this->saveImages) {

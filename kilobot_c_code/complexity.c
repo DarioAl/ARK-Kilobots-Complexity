@@ -102,7 +102,7 @@ decision_t current_decision_state = NOT_COMMITTED;
 bool internal_error = false;
 
 /* EMA alpha */
-const double stocazzo = 0.5;
+const double emaalpha = 0.5;
 /* Variables for Smart Arena messages */
 uint8_t sa_type = 0; // smart arena type (i.e. resource id)
 uint8_t resources_hits[RESOURCES_SIZE]; // number of hits for each resource, to be compute by mean of an exp avg
@@ -178,15 +178,17 @@ void set_motion(motion_t new_motion_type) {
 void exponential_average(uint8_t resource_id, uint8_t resource_pop) {
   // update by using exponential moving averagae to update estimated population
   /* https://stackoverflow.com/questions/37300684/implementing-exponential-moving-average-in-c */
-  resources_pops[resource_id] = (uint8_t)(resources_pops[resource_id])*stocazzo+(1-stocazzo)*resource_pop;
+  resources_pops[resource_id] = (uint8_t)(resources_pops[resource_id])*emaalpha+(1-emaalpha)*resource_pop;
 }
 
 void merge_scan(bool time_window_is_over) {
   if(time_window_is_over && messages_count>0) {
-    for(uint8_t i=0; i<RESOURCES_SIZE; i++) {
+    uint8_t i;
+    for(i=0; i<RESOURCES_SIZE; i++) {
       // counts all other resoruces hits
       uint8_t hits_otherResources = 0;
-      for(uint8_t j=0; j<RESOURCES_SIZE; j++) {
+      uint8_t j;
+      for(j=0; j<RESOURCES_SIZE; j++) {
         if(i!=j)
           hits_otherResources += resources_hits[j];
       }
@@ -266,7 +268,8 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
 
     // store the message in the buffer
     if(buffer_iterator == 255) {
-      for(uint8_t i=0; i<BUFFER_SIZE; i++) {
+      uint8_t i;
+      for(i=0; i<BUFFER_SIZE; i++) {
         // trick to avoid accessing bad data at the very beginning
         // this will be filled very soon with good data anyway
         last_received_messages[1] = c_message;
@@ -325,8 +328,8 @@ void take_decision() {
     /* spontaneous commitment process through discovery */
     /****************************************************/
     uint16_t sum_committments = 0;
-
-    for(int i=0; i<RESOURCES_SIZE; i++) {
+    int i;
+    for(i=0; i<RESOURCES_SIZE; i++) {
       if(resources_pops[i] > resources_umin[i]) {
         // normalize between 0 and 255 according to k
         processes[i] = resources_pops[i]*h;
@@ -363,7 +366,7 @@ void take_decision() {
     }
 
     uint8_t extraction = rand_hard(); // a random number to extract next decision
-    for(int i=0; i<RESOURCES_SIZE; i++) {
+    for(i=0; i<RESOURCES_SIZE; i++) {
       extraction -= processes[i];
       if(extraction <= 0) {
         current_decision_state = i;
@@ -477,7 +480,8 @@ void setup() {
   set_color(RGB(3,3,3));
   /* Initialise motion variables */
   set_motion(FORWARD);
-  for(uint8_t i; i<RESOURCES_SIZE; i++) {
+  uint8_t i;
+  for(i=0; i<RESOURCES_SIZE; i++) {
     resources_hits[i] = 0;
     resources_pops[i] = 125;
     resources_umin[i] = 0;
