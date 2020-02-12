@@ -30,7 +30,7 @@ extern "C" COMPLEXITYEXPERIMENTEXPSHARED_EXPORT KilobotExperiment *createExpt()
 
 /* setup the environment */
 mykilobotexperiment::mykilobotexperiment() {
-    qDebug() << QString("in constructor");
+    // qDebug() << QString("in constructor");
 
     // Initialize seed
     QDateTime cd = QDateTime::currentDateTime();
@@ -43,7 +43,7 @@ mykilobotexperiment::mykilobotexperiment() {
 
 /* create the GUI as a separate frame in the main ARK window */
 QWidget *mykilobotexperiment::createGUI() {
-    qDebug() << QString("in create gui");
+    // qDebug() << QString("in create gui");
 
     QFrame *frame = new QFrame;
     frame->setLayout(lay);

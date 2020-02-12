@@ -21,17 +21,14 @@ enum lightColour {
 
 typedef uint16_t kilobot_id;
 typedef unsigned char kilobot_channel_colour;
-//typedef unsigned char kilobot_message_type;
-// typedef struct {
-//        uint8_t type :4;
-//        kilobot_id id :10;
-//        uint16_t data :10;
-//} kilobot_message;
 
+typedef unsigned char kilobot_message_type;
+
+// YOUR ORIGINAL DEFINITION
 typedef struct {
-    uint8_t data[9]; ///< message payload.
-    uint8_t type;    ///< message type.
-    uint16_t crc;    ///< message crc.
+        uint8_t type :4;
+        kilobot_id id :10;
+        uint16_t data :10;
 } kilobot_message;
 
 struct kilobot_broadcast {

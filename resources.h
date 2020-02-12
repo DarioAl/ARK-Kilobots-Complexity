@@ -94,7 +94,6 @@ public:
    * generate areas for the resource by taking into account all other areas positions
    */
     void generate(QVector<Area>& oth_areas, double arena_radius, uint num_of_areas) {
-        std::cout << "asking to generate " << num_of_areas << std::endl;
         uint tries = 0;         // placement tries
         uint maxTries = 9999;   // max placement tries
 
@@ -162,9 +161,6 @@ public:
                     QPointF ap = area.position;
                     if(pow(kbp.x()-ap.x(),2)+pow(kbp.y()-ap.y(),2) < pow(area_radius, 2)) {
                         area.kilobots_in_area++;
-                        std::cout << "there is one kb in the area" << std::endl;
-                        // TODO activate the kb and the leds and check if the logic works
-                        // if it works fuck this shit its done!
                         break;
                     }
                 }

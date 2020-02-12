@@ -38,12 +38,12 @@ void mykilobotenvironment::reset() {
     kilobots_positions.clear();
 
     QVector<Area> oth_areas;
-    double area_radius = 170;
+    double area_radius = 70;
     Resource a(0, 1000, area_radius, 0.1, oth_areas);
     std::cout << oth_areas.size() << std::endl;
-    Resource b(1, 1000, area_radius, 0.1, oth_areas);
+    Resource b(1, 1000, area_radius, 0.0, oth_areas);
         std::cout << oth_areas.size() << std::endl;
-    Resource c(2, 1000, area_radius, 0.1, oth_areas);
+    Resource c(2, 1000, area_radius, 0.0, oth_areas);
         std::cout << oth_areas.size() << std::endl;
 
     resources.push_back(a);
@@ -52,7 +52,7 @@ void mykilobotenvironment::reset() {
 }
 
 void mykilobotenvironment::update() {
-    qDebug() << QString("in update");
+    //qDebug() << QString("in update");
 
     // get all areas in a single array to avoid placing duplicate
     QVector<Area> allAreas;
@@ -112,29 +112,36 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
     // now we have everything up to date and everything we need
     // then if it is time to send the message to the kilobot send info to the kb
     if(this->time - this->lastSent[k_id] > minTimeBetweenTwoMessages && !ongoingRuntimeIdentification){
+        qDebug() << "SENDING OUT MESSAGE";
         lastSent[k_id] = this->time;
 
         // create and fill the message
         kilobot_message message;
-        message.type = 0; // 0 is used for aren, 1 for message
+        message.type = 0; // 0 is used for arena, 1 for message
 
-        message.data[0] = k_id; // send current kb id
-        message.data[1] = kilobots_states.at(k_id); // send current kb arena state
-        if(kilobots_states.at(k_id) != 255) {
-            message.data[2] = resources.at(kilobots_states.at(k_id)).umin;  // if over a resource send resource umin
-        }
+        // TODO change this also in ARGOS, use the same logic
 
-        // send distance from the center in percentage  and relative bearing
-        double orient_degrees = qRadiansToDegrees(qAtan2(-kilobot_entity.getVelocity().y(), kilobot_entity.getVelocity().x()));
-        QVector2D kb_orientation(1, orient_degrees);
-        QVector2D kb_position(this->kilobots_positions[k_id].x(), this->kilobots_positions[k_id].y());
-        kb_orientation.normalize();
-        kb_position.normalize();
-        double distance_from_centre = sqrt(pow(kb_position.x(),2)+pow(kb_position.y(),2));
-        // get kb the orientation
-        double turning_angle = M_PI	* QVector2D::dotProduct(kb_orientation,kb_position);
-        message.data[3] = (uint8_t) distance_from_centre*100;
-        message.data[4] = (uint8_t) turning_angle*10;
+//        message.type = k_id >> 4; // send current kb id
+//        message.id = k_id << 4 | pieceofdata; // the whole kb id up 256 and part of the data
+//        kilobots_states.at(k_id) >> 6
+
+
+//        message.data[1] = kilobots_states.at(k_id); // send current kb arena state
+//        if(kilobots_states.at(k_id) != 255) {
+//            message.data[2] = resources.at(kilobots_states.at(k_id)).umin;  // if over a resource send resource umin
+//        }
+
+//        // send distance from the center in percentage  and relative bearing
+//        double orient_degrees = qRadiansToDegrees(qAtan2(-kilobot_entity.getVelocity().y(), kilobot_entity.getVelocity().x()));
+//        QVector2D kb_orientation(1, orient_degrees);
+//        QVector2D kb_position(this->kilobots_positions[k_id].x(), this->kilobots_positions[k_id].y());
+//        kb_orientation.normalize();
+//        kb_position.normalize();
+//        double distance_from_centre = sqrt(pow(kb_position.x(),2)+pow(kb_position.y(),2));
+//        // get kb the orientation
+//        double turning_angle = M_PI	* QVector2D::dotProduct(kb_orientation,kb_position);
+//        message.data[3] = (uint8_t) distance_from_centre*100;
+//        message.data[4] = (uint8_t) turning_angle*10;
 
         // send it
         emit transmitKiloState(message);
