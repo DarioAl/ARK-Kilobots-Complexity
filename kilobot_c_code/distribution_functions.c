@@ -66,4 +66,3 @@ int levy(const double c, const double alpha)
 
   return (int)(c * t * s);
 }
-

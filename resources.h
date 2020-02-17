@@ -1,4 +1,3 @@
-
 /**
  * A resource is represented by a group of areas.
  * i.e. a group of dots around the environment that shares the same type
@@ -102,10 +101,9 @@ public:
                 QPointF pos;
                 // find a possible placement inside the arena
                 double rand_angle = getRandDouble(0, 2*M_PI);
-                double rand_displacement_x = getRandDouble(0, arena_radius);
-                double rand_displacement_y = getRandDouble(0, arena_radius);
-                pos.setX(rand_displacement_x*cos(rand_angle));
-                pos.setY(rand_displacement_y*sin(rand_angle));
+                double rand_distance = getRandDouble(0, arena_radius-0.15);
+                pos.setX(rand_distance*cos(rand_angle));
+                pos.setY(rand_distance*sin(rand_angle));
                 // translate to center w.r.t. the image
                 pos.rx()+=1000;
                 pos.ry()+=1000;
@@ -185,7 +183,11 @@ public:
                 it = areas.erase(it);
                 population = areas.size()/k;
             }
-            // else increase iterator
+            // avoid bad poiting
+            if(it == areas.end()) {
+              break;
+            }
+            // increase iterator
             ++it;
         }
 
