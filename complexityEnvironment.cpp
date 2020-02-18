@@ -112,43 +112,53 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
     // now we have everything up to date and everything we need
     // then if it is time to send the message to the kilobot send info to the kb
     if(this->time - this->lastSent[k_id] > minTimeBetweenTwoMessages && !ongoingRuntimeIdentification){
-        qDebug() << "SENDING OUT MESSAGE";
         lastSent[k_id] = this->time;
 
         // create and fill the message
         kilobot_message message; // this is a 24 bits field not the original kb message
         // make sure to start clean
-        message.type = 0;
         message.id = 0;
+        message.type = 0;
         message.data = 0;
 
-        /* Prepare the individual kilobot message     */
-        /* xxxx xxxx xyyz zzzw wwww wwww              */
-        /* x bits used for bilobot id                 */
-        /* y bits used for kilobot arena state        */
-        /* z bits used for resource umin              */
-        /* w bits used for kilobot rotation to center */
+        // !!! THE FOLLOWING IS OF EXTREME IMPORTANCE !!!
+        // NOTE although the message is defined as type, id and data, in ARK the fields type and id are swapped
+        // resulting in a mixed message. If you are not using the whole field this could lead to problems.
+        // To avoid it, consider to concatenate the message as ID, type and data.
 
-        // store kb id
-        message.type = (k_id >> 5);
-        message.id = k_id << 5;
+        /* Prepare the inividual kilobot's message         */
+        /* see README.md to understand about ARK messaging */
+        /* data has 3x24 bits divided as                   */
+        /*   ID 10b    type 4b  data 10b     <- ARK msg    */
+        /*  data[0]   data[1]   data[2]      <- kb msg     */
+        /* xxxx xxxx xyyz zzzw wwww wwww     <- complexity */
+        /* x bits used for kilobot id                      */
+        /* y bits used for kilobot arena state             */
+        /* z bits used for resource umin                   */
+        /* w bits used for kilobot rotattion toward center */
 
-        // store kb arena state
-        // for the kb the state is 0 if empty
-        // 1 2 3 over area 1 area 2 or area 3
+        // 9 bits used for the id of the kilobot store in the first 9 bits of the message
+        message.id = k_id << 1;
+
+        // 2 bits used for the kb state (over a resource?)
+        // this is changed as following
+        // 0 no resource
+        // 1 resource 1
+        // 2 resource 2
+        // 3 resource 3
         uint8_t kb_arena_state = kilobots_states.at(k_id) + 1; // add +1 to convert to kb form
-        message.id = message.id | (kb_arena_state << 3);
+        message.id = message.id | (kb_arena_state >> 1);
+        message.type = (kb_arena_state &0x01) << 3;
 
-        // store resource umin (if arena state not on empty space)
+        // this are stored in the last thhree bits of m_sID and first of m_sData
         if(kb_arena_state != 0) { // i.e. 255 in local kilobots_state list
             uint8_t rumin = resources.at(kb_arena_state-1).umin;
-            message.id = message.id | (rumin >> 1);
+            message.type = message.type | (rumin >> 1);
             message.data = rumin << 9;
         }
 
         // store kb rotation toward the center if the kb is too close to the border
         // this is used to avoid that the kb gets stuck in the wall
-
         QVector2D kb_position(this->kilobots_positions[k_id].x(), this->kilobots_positions[k_id].y());
         kb_position.normalize();
         double distance_from_centre = sqrt(pow(kb_position.x(),2)+pow(kb_position.y(),2));
@@ -159,9 +169,9 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
             kb_orientation.normalize();
             double turning_angle = M_PI	* QVector2D::dotProduct(kb_orientation,kb_position);
 
-            uint8_t angle_sign = turning_angle > 0? 1 : -1;
+            uint16_t angle_sign = turning_angle > 0? 1 : -1;
             uint8_t degree_angle = turning_angle * 180 / M_PI;
-            message.data = message.data | angle_sign << 8 | degree_angle;
+            message.data = message.data | (angle_sign << 8) | degree_angle;
         }
 
         // send it
