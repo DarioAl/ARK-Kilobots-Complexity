@@ -9,9 +9,19 @@ class KilobotEnvironment : public QObject
 {
     Q_OBJECT
 public:
+    typedef enum {
+        OUTSIDE_AREA=255,
+        INSIDE_AREA_0=0,
+        INSIDE_AREA_1=1,
+        INSIDE_AREA_2=2,
+        INSIDE_AREA_01=3,
+        INSIDE_AREA_02=6,
+        INSIDE_AREA_12=7,
+        INSIDE_AREA_012=9,
+    } kilobot_arena_state;
+
     explicit KilobotEnvironment(QObject *) {}
     KilobotEnvironment() {}
-//    virtual QVector <uint8_t> getEnvironmentValue(QPointF) { QVector <uint8_t> temp; return temp;} // Don't need?
 
 signals:
     void transmitKiloState(kilobot_message);

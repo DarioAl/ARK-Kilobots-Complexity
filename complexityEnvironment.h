@@ -31,8 +31,9 @@ public:
     explicit mykilobotenvironment(QObject *parent=0);
     void reset();
 
-    QVector<Resource> resources; // list of all resources present in the experiment
-    QVector<uint8_t> kilobots_states;  // list of all kilobots locations meaning 255 for empty spaces and 1, 2, 3 for resources
+    QVector<kilobot_arena_state> kilobots_states;  // list of all kilobots locations meaning 255 for empty spaces and 1, 2, 3 for resources
+
+    QVector<Resource*> resources; // list of all resources present in the experiment
     QVector<QPointF> kilobots_positions;    // list of all kilobots positions
     QVector<QColor> kilobots_colours;  // list of all kilobots led colours, the led indicate committed (red), working (green) and uncommiited (blue)
     QVector<float> lastSent;    // when the last message was sent to the kb at given position
@@ -41,8 +42,6 @@ public:
     double time;
     int ArenaX, ArenaY;
     bool ongoingRuntimeIdentification;
-
-    void addResourcesTo(int resource_index, int numOfAreas);
 
 // signals and slots are used by qt to signal state changes to objects
 signals:

@@ -8,10 +8,10 @@ QT       -= gui
 
 QT += widgets
 
-TARGET = Experiment1
+TARGET = ExperimentCOMPLEXITY
 TEMPLATE = lib
 
-DEFINES += EXPERIMENT1EXP_LIBRARY
+DEFINES += EXPERIMENTCEEXP_LIBRARY
 
 SOURCES += \
     kilobot.cpp \

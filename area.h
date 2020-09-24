@@ -15,20 +15,8 @@
 
 #include <QPointF>
 #include <QColor>
-
-// base population for every area
-#define BASE_POP 50
-
+#include <iostream>
 class Area {
-private:
-    // enum for resource color, at max 3 different resource admitted
-    QColor enumColor[3] = {
-        Qt::green,
-        Qt::red,
-        Qt::yellow,
-    };
-
-
 public:
     uint type; // resource type
     uint id; // area id
@@ -39,41 +27,70 @@ public:
     QColor color; /* Color used to represent the area */
     uint kilobots_in_area; /* keep counts of how many kbs are in the area*/
     std::string exploitation_type; /* determine the exploitation on the area by different kbs */
-
-
+    double lambda; /* epxloitation coefficient */
+    double eta; /* area growth */
 
     /* constructor */
-    Area() : type(0), id(0), position(QPointF(0,0)), radius(0), exploitation_type("linear") {}
+    Area() : type(0), id(0), position(QPointF(0,0)), radius(0), exploitation_type("quadratic") {}
 
     Area(uint type, uint id, QPointF position, double radius, std::string exploitation_type) :
         type(type), id(id), position(position), radius(radius), exploitation_type(exploitation_type) {
         this->kilobots_in_area = 0;
-        this->population = BASE_POP;
-        this->color = enumColor[type];
+        this->population = 1;
+        this->lambda = 0.005;
+        this->eta = 0.008424878;
+
+        if(type == 0)
+            this->color = Qt::red;
+        else if(type == 1)
+            this->color = Qt::green;
+        else
+            this->color = Qt::blue;
     }
 
     /* destructor */
     ~Area(){}
 
+    /* check if the point is inside the area */
+    bool isInside(QPointF point) {
+       return pow(point.x()-position.x(),2)+pow(point.y()-position.y(),2) <= pow(radius,2);
+    }
+
     /*
    * do one simulation step during which:
    * - the population is decreased according to the number of agents
    *
-   * @return true if a specific the population value reaches 0
+   * @return exploitation
    */
-    bool doStep() {
-        if(this->exploitation_type == "quadratic") {
-            this->population -= pow(kilobots_in_area,3);
-        } else if(this->exploitation_type == "cubic") {
-            this->population -= pow(kilobots_in_area,2);
+    double doStep() {
+        // compute exploitation
+        double exploitation = 0;
+        if(this->exploitation_type == "cubic") {
+            exploitation = this->population*lambda*pow(kilobots_in_area,3);
+        } else if(this->exploitation_type == "quadratic") {
+            exploitation = this->population*lambda*pow(kilobots_in_area,2);
         } else {
-            // it is linear
-            this->population -= kilobots_in_area;
+            exploitation = this->population*lambda*kilobots_in_area;
+        }
+
+        // compute growth
+        double growth = this->population*eta*(1-this->population);
+
+        // sum and subtract
+        this->population = this->population - exploitation + growth;
+
+        // trick to restore areas that went to low (usually due to bad led readings)
+        if(this->population <= 0.0001) {
+            this->population = 0.001;
         }
 
         // reset kbs in the area
         this->kilobots_in_area = 0;
-        return this->population ==0;
+
+        //std::cout << "utility is " << population;
+        //std::cout << "exploitation is " << exploitation << " growth is " << growth << std::endl;
+        // return exploitation
+        return exploitation;
     }
 };
 

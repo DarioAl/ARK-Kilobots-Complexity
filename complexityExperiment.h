@@ -119,38 +119,28 @@ public slots:
         logExp = toggle;
     }
 
-    // set resource growth rate
-    inline void setResourceAEta(double eta) {
-        complexityEnvironment.resources[0].eta = eta;
-    }
-    inline void setResourceBEta(double eta) {
-        complexityEnvironment.resources[1].eta = eta;
-    }
-    inline void setResourceCEta(double eta) {
-        complexityEnvironment.resources[2].eta = eta;
-    }
+//    // set resource growth rate
+//    inline void setResourceAEta(double eta) {
+//        complexityEnvironment.resources[0].eta = eta;
+//    }
+//    inline void setResourceBEta(double eta) {
+//        complexityEnvironment.resources[1].eta = eta;
+//    }
+//    inline void setResourceCEta(double eta) {
+//        complexityEnvironment.resources[2].eta = eta;
+//    }
 
-    // set resource C population cap as number of areas
-    inline void setResourceAK(int k) {
-        complexityEnvironment.resources[0].k = k;
-    }
-    inline void setResourceBK(int k) {
-        complexityEnvironment.resources[1].k = k;
-    }
-    inline void setResourceCK(int k) {
-        complexityEnvironment.resources[2].k = k;
-    }
+//    // set resource C population cap as number of areas
+//    inline void setResourceAK(int k) {
+//        complexityEnvironment.resources[0].k = k;
+//    }
+//    inline void setResourceBK(int k) {
+//        complexityEnvironment.resources[1].k = k;
+//    }
+//    inline void setResourceCK(int k) {
+//        complexityEnvironment.resources[2].k = k;
+//    }
 
-    // set resource minimum population for exploitation as percentage
-    inline void setResourceAUmin(double umin) {
-        complexityEnvironment.resources[0].umin = umin;
-    }
-    inline void setResourceBUmin(double umin) {
-        complexityEnvironment.resources[1].umin = umin;
-    }
-    inline void setResourceCUmin(double umin) {
-        complexityEnvironment.resources[2].umin = umin;
-    }
 
     QColor GetFloorColor(int x, int y);
 
