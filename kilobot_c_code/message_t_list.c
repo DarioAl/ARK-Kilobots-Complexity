@@ -1,187 +1,150 @@
 /** @author Dario Albani */
-#include <stdlib.h>
-#include <stdio.h>
 #include "message_t_list.h"
-#include <stdlib.h>
 
 /* append as tail */
-void mtl_push_back(node_t* head, message_t* msg, uint16_t time_stamp) {
+void mtl_push_back(node_t *head, node_t* new_node) {
   node_t* current = head;
-  while (current->next != NULL) {
+
+  while(current->next != NULL) {
     current = current->next;
   }
 
   current->next = malloc(sizeof(node_t));
-  current->next->msg = msg;
-  current->next->time_stamp = time_stamp;
+  current->next = new_node;
   current->next->next = NULL;
 }
 
-/* push on top as head */
-void mtl_push_top(node_t** head, message_t* msg, uint16_t time_stamp) {
-    node_t * new_node;
-    new_node = malloc(sizeof(node_t));
-
-    new_node->msg = msg;
-    new_node->time_stamp = time_stamp;
-    new_node->next = *head;
-    *head = new_node;
-}
-
-/* remove head */
-void mtl_remove_first(node_t** head) {
-  node_t* next_node = NULL;
-
-  if (!(*head)) {
-    return;
-  }
-
-  next_node = (*head)->next;
-  free((*head)->msg);
-  free(*head);
-  *head = next_node;
-}
-
-/* remove tail */
-void mtl_remove_last(node_t* head) {
-  /* if there is only one item in the list, remove it */
-  if (head->next == NULL) {
-    mtl_remove_first(&head);
-    return;
-  }
-
-  /* iterate the list */
-  node_t* current = head;
-  while(current->next->next != NULL) {
-    current = current->next;
-  }
-
-  /* current points to the second to last item of the list */
-  free(current->next->msg);
-  free(current->next);
-  current->next = NULL;
-}
-
-/* remove node in position */
-void mtl_remove_at(node_t** head, int n) {
+void mtl_remove_at(node_t **head, uint16_t position) {
   node_t* current = *head;
-  node_t* temp_node = NULL;
+  node_t* temp = NULL;
 
-  if(current && n == 0) {
-    mtl_remove_first(head);
+  // empty list
+  if(current == NULL) {
     return;
   }
 
-  /* find node to remove */
-  while(current && n>1) {
+  // asking to remove the head
+  if(position == 0) {
     current = current->next;
-    n = n-1;
-  }
-
-  /* invalid n */
-  if(n>1) {
+    free(*head);
+    *head = current;
     return;
   }
 
-  /* re link the list */
-  temp_node = current->next;
-  if(temp_node) {
-    current->next = temp_node->next;
+  // asking to remove any other node
+  while(current->next && position>1) {
+    current = current->next;
+    position = position-1;
   }
-  free(temp_node);
-}
 
-/* remove first node with same crc of message_t */
-void mtl_remove_node(node_t** head, node_t* to_remove) {
-  node_t* current = *head;
-  node_t* temp_node = NULL;
-
-  if(current && current->msg->crc == to_remove->msg->crc) {
-    mtl_remove_first(head);
+  if(position > 1)
     return;
-  }
-
-  /* find node to remove */
-  while(current->next && current->next->msg) {
-    if(current->next->msg->crc == to_remove->msg->crc) {
-      temp_node = current->next->next;
-      free(current->next);
-      current->next = temp_node;
-      return;
+  else {
+    temp = current->next;
+    if(temp){
+      current->next = temp->next;
     }
+    free(temp);
   }
 }
 
 /* check if a node with same data is already present in the list */
-/* return the position of the first node found, -1 if none is found */
-unsigned mtl_is_node_present(node_t* head, node_t* to_find) {
-  unsigned position = 0;
+/* return the position of the first node found                   */
+/* 0 first element of the list                      */
+uint16_t mtl_is_message_present(node_t* head, message_t msg) {
   node_t* current = head;
 
-  while(current && current->msg) {
-    if(current->msg->crc == to_find->msg->crc) {
-      return position;
+  while(current != NULL) {
+    // check for equality comparing the robot id
+    if(current->msg.data[0] == msg.data[0]) {
+      return 1;
     }
     current = current->next;
-    position++;
-  }
-  return -1;
-}
-
-/* check if a node with same data is already present in the list */
-/* return the position of the first node found, -1 if none is found */
-unsigned mtl_is_message_present(node_t* head, message_t* to_find) {
-  unsigned position = 0;
-  node_t* current = head;
-
-  while(current && current->msg) {
-    if(current->msg->crc == to_find->crc) {
-      return position;
-    }
-    current = current->next;
-    position++;
-  }
-  return -1;
-}
-
-/* get the node at position pos                   */
-/* first element of the list is 0, last is size-1 */
-void mtl_get_node_at(node_t* head, unsigned pos, node_t* to_retrieve) {
-  node_t* current = head;
-  while(current && pos>0) {
-    current = current->next;
-    pos--;
   }
 
-  if(pos==0 && current) {
-    // got it
-    to_retrieve = current;
-  }
+  return 0;
 }
 
 /* get first non rebroadcast message   */
-void mtl_get_not_rebroadcasted(node_t* head, node_t* not_rebroadcasted) {
+node_t* mtl_get_first_not_rebroadcasted(node_t* head) {
   node_t* current = head;
 
   while(current) {
     if(current->been_rebroadcasted) {
       current = current->next;
     } else {
-      not_rebroadcasted = current;
-      return;
+      return current;
     }
   }
+  return NULL;
+}
+
+void mtl_clean_list(node_t** head) {
+  while((*head)->next) {
+    mtl_remove_at(head, 0);
+  }
+
+  // now free head and return null
+  node_t *temp = *head;
+  *head = NULL;
+  free(temp);
+}
+
+/* clear old messages from the list */
+/* clear all messages whose time is less than time */
+uint16_t mtl_clean_old(node_t** head, uint32_t time) {
+  node_t* current = *head;
+  node_t* temp = NULL;
+  // keep track of list size while doing this scan
+  uint16_t list_size = 0;
+
+  // empty list
+  if(current != NULL) {
+    // at least the head is there
+    list_size = 1;
+
+    // asking to remove any other node, head is parsed last
+    while(current->next) {
+      // check next one
+      if(current->next->time_stamp < time) {
+        // store next next for linking
+        temp = current->next->next;
+        // free current next
+        free(current->next);
+        // link current and temp
+        current->next = temp;
+      } else {
+        // increase the counter
+        list_size = list_size+1;
+        // update current for the loop
+        current = current->next;
+      }
+    }
+
+    // now at least the head is there
+    // check it
+    current = *head;
+    if(current->time_stamp < time) {
+      // set the head to current next
+      *head = current->next;
+      // free prev head
+      free(current);
+      // decrease the counter
+      list_size = list_size-1;
+    }
+  }
+
+  return list_size;
 }
 
 /* return list size */
-unsigned mtl_size(node_t* head) {
+uint16_t mtl_size(node_t* head) {
+  uint16_t size = 0;
   node_t* current = head;
-  unsigned n = 0;
 
   while(current) {
-    n = n+1;
     current = current->next;
+    size = size+1;
   }
-
-  return n;
+  return size;
 }
