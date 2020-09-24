@@ -152,8 +152,17 @@ uint8_t to_send_message = false;
 message_t interactive_message;
 
 /* for broacasts */
-uint32_t last_broadcast_ticks = 0;
-const uint32_t broadcast_ticks = 2*31;
+#ifdef ARGOS_simulator_BUILD
+// in ARGoS we do not need particular communication protocol, we 
+// do not care about collission and message propagation
+const uint32_t broadcast_ticks = 2*31; // one message every broadcast_ticks (not the same as below with ARK!)
+uint32_t last_broadcast_ticks = 0; // when last broadcast occurred
+#else
+// with real kilobots we adopt a different message propagation strategy to avoid
+// collision and medium overload
+char release_the_broadcast = 0; // if true, start broadcasting until false
+uint32_t last_release_time = 0; // used to restore the state of the kilobot after freezing it for broadcast
+#endif
 
 /* messages are valid for valid_until ticks */
 const uint32_t valid_until = 15*31;
@@ -389,6 +398,20 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
       // update umax
       umax = (uint8_t)round(((float)msg->data[8]*(ema_alpha)) + ((float)umax*(1.0-ema_alpha)));
     }
+
+  } else if(msg->type == 2 && !release_the_broadcast) { // only used within ARK 
+    // save time to restore the variables after   
+    last_release_time = kilo_ticks;
+    // time to brodcast 
+    release_the_broadcast = 1;
+    
+  } else if(msg->type == 3 && release_the_broadcast) { // only used within ARK
+    // update variables to restore the kilobot at its previous state
+    last_motion_ticks = last_motion_ticks + kilo_ticks - last_release_time;
+    last_decision_ticks = last_decision_ticks + kilo_ticks - last_release_time;
+    // time to stop the broadcast
+    release_the_broadcast = 0;
+
   } else if(msg->type==120) {
     // kilobot signal id message (only used in ARK to avoid id assignment)
     // note that here the original ARK messages are used hence the id is assigned in the
@@ -776,38 +799,66 @@ void quorum_sensing() {
   }
 }
 
+void get_message_for_rebroadcast() {
+  // -----------------------------
+  // clean list (remove outdated messages)
+  list_size = mtl_clean_old(&b_head, kilo_ticks-valid_until);
+
+  // or clean list completely
+  //mtl_clean_list(&b_head);
+  //list_size = 0;
+  // -----------------------------
+
+
+  // get first not rebroadcasted message from flooding buffer
+  node_t* not_rebroadcasted = NULL;
+  not_rebroadcasted = mtl_get_first_not_rebroadcasted(b_head);
+
+  // if there is a valid message then set it up for rebroadcast
+  if(not_rebroadcasted) {
+    // update the rebroadcasted status in the message
+    not_rebroadcasted->been_rebroadcasted = true;
+    // tell that we have a msg to send
+    to_send_message = true;
+    // set it up for rebroadcast
+    interactive_message.type = 1;
+    memcpy(interactive_message.data, not_rebroadcasted->msg.data, sizeof(uint8_t));
+    // update hops count for debug
+    interactive_message.data[6] = interactive_message.data[6]+1;
+    // compute crc again
+    interactive_message.crc = message_crc(&interactive_message);
+  }
+}
+
 /*-------------------------------------------------------------------*/
 /* Main loop                                                         */
 /*-------------------------------------------------------------------*/
 void loop() {
-  // visual debug. Signal internal decision errors
-  // if the kilobots blinks green and blue something was wrong
-  while(internal_error) {
-    // somewhere over the rainbow....
-    set_color(RGB(3,0,0));
-    delay(500);
-    set_color(RGB(0,3,0));
-    delay(500);
-    set_color(RGB(0,0,3));
-    delay(500);
-    set_color(RGB(3,3,0));
-    delay(500);
-    set_color(RGB(3,0,3));
-    delay(500);
-    set_color(RGB(0,3,3));
-    delay(500);
+
+#ifndef ARGOS_simulator_BUILD
+/*
+ * if ARK is signaling to rebroacast, then the kilobots stops what they are doing and start rebroadcasting 
+ * until ARK signals otherwise (message type 2 and 3 are used for these operations)
+ */
+  if(release_the_broadcast) {
+    // stop moving 
+    set_motion(STOP);
+    // signal broadcast using a white led (this will not be recognized by ARK)
     set_color(RGB(3,3,3));
-    delay(500);
+    // get next message for rebroadcast
+    if(sent_message) {
+      get_message_for_rebroadcast();
+    }
+    
+    // DO NOT DO ANYTHING ELSE
+    return;
   }
+#endif
 
   /*
-   * if
-   *   it is time to take decision after the exploration the fill up an update message for other kbs
-   *   then update utility estimation and take next decision according to the PFSM
-   *   NOTE this has higher priority w.r.t. the rebroadcast below. There is no check over the sent_message flag
-   * else
-   *   continue the exploration by means of random walk and only use the communication medium to
-   *   rebroadcast messages
+   * THIS PART IS COMMONG IN BOTH ARK AND ARGoS
+   * if it is time to take decision after the exploration the fill up an update message for other kbs
+   * then update utility estimation and take next decision according to the PFSM
    */
   if(exploration_ticks <= kilo_ticks-last_decision_ticks) {
     // clean list (remove outdated messages)
@@ -844,6 +895,9 @@ void loop() {
       interactive_message.data[3+res_index] = resources_pops[res_index];
     }
 
+    // hops count
+    interactive_message.data[6] = 0;
+
     // last byte used for umax
     interactive_message.data[8] = umax;
 
@@ -856,38 +910,23 @@ void loop() {
     // reset last decision ticks
     last_decision_ticks = kilo_ticks;
 
-  } else if(sent_message && broadcast_ticks <= kilo_ticks-last_broadcast_ticks) {
-    // -----------------------------
-    // clean list (remove outdated messages)
-    list_size = mtl_clean_old(&b_head, kilo_ticks-valid_until);
-
-    // or clean list completely
-    //mtl_clean_list(&b_head);
-    //list_size = 0;
-    // -----------------------------
-
-
-    // get first not rebroadcasted message from flooding buffer
-    node_t* not_rebroadcasted = NULL;
-    not_rebroadcasted = mtl_get_first_not_rebroadcasted(b_head);
-
-    // if there is a valid message then set it up for rebroadcast
-    if(not_rebroadcasted) {
-      // update the rebroadcasted status in the message
-      not_rebroadcasted->been_rebroadcasted = true;
-      // tell that we have a msg to send
-      to_send_message = true;
-      // set it up for rebroadcast
-      interactive_message.type = 1;
-      memcpy(interactive_message.data, not_rebroadcasted->msg.data, sizeof(uint8_t));
-      interactive_message.crc = message_crc(&interactive_message);
-    }
-
-    // reset flag
+  } 
+#ifdef ARGOS_simulator_BUILD
+  /* 
+  * in ARGoS we do not care about collisions between messages and simply rebroadcast at
+  * time intervals
+  */
+  else if(sent_message && broadcast_ticks <= kilo_ticks-last_broadcast_ticks) {
+    get_message_for_rebroadcast();
+    // reset flag for time
     last_broadcast_ticks = kilo_ticks;
   }
+#endif
 
-  /* Now parse the decision and act accordingly */
+  /* 
+   * THIS PART IS COMMONG IN BOTH ARK AND ARGoS
+   * Now parse the decision and act accordingly
+   */
   // if over the wanted resource turn on the right led color
   if(current_decision_state == COMMITTED_AREA_0) {
     set_color(RGB(3,0,0));
@@ -899,6 +938,8 @@ void loop() {
     set_color(RGB(0,0,3));
   }
 #ifdef ARGOS_simulator_BUILD
+   // in ARGoS a white led is used to signal quorum state
+   // in ARK, due to perceptions errors, this is avoided
    else if(current_decision_state == QUORUM_AREA_0 ||
             current_decision_state == QUORUM_AREA_1 ||
             current_decision_state == QUORUM_AREA_2) {
