@@ -155,13 +155,14 @@ message_t interactive_message;
 #ifdef ARGOS_simulator_BUILD
 // in ARGoS we do not need particular communication protocol, we 
 // do not care about collission and message propagation
-const uint32_t broadcast_ticks = 2*31; // one message every broadcast_ticks (not the same as below with ARK!)
+const uint32_t broadcast_ticks = 0*31; // one message every broadcast_ticks (not the same as below with ARK!)
 uint32_t last_broadcast_ticks = 0; // when last broadcast occurred
 #else
 // with real kilobots we adopt a different message propagation strategy to avoid
 // collision and medium overload
 char release_the_broadcast = 0; // if true, start broadcasting until false
 uint32_t last_release_time = 0; // used to restore the state of the kilobot after freezing it for broadcast
+char first_time_after_release = 0; 
 #endif
 
 /* messages are valid for valid_until ticks */
@@ -404,14 +405,16 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     last_release_time = kilo_ticks;
     // time to brodcast 
     release_the_broadcast = 1;
-    
+    // set that is the first time that we received the signal to rebroadcast
+    first_time_after_release = 1;
   } else if(msg->type == 3 && release_the_broadcast) { // only used within ARK
     // update variables to restore the kilobot at its previous state
     last_motion_ticks = last_motion_ticks + kilo_ticks - last_release_time;
     last_decision_ticks = last_decision_ticks + kilo_ticks - last_release_time;
     // time to stop the broadcast
     release_the_broadcast = 0;
-
+    // set that is the first time that we received the signal to rebroadcast
+    first_time_after_release = 1;
   } else if(msg->type==120) {
     // kilobot signal id message (only used in ARK to avoid id assignment)
     // note that here the original ARK messages are used hence the id is assigned in the
@@ -434,8 +437,6 @@ message_t *message_tx() {
   if(to_send_message) {
     /* this one is filled in the loop */
     to_send_message = false;
-    /* avoid rebroadcast to overwrite prev message */
-    sent_message = 0;
 
     return &interactive_message;
   } else {
@@ -799,6 +800,75 @@ void quorum_sensing() {
   }
 }
 
+/* Parse the decision and act accordingly */
+void update_led_status() {
+  // if over the wanted resource turn on the right led color
+  if(current_decision_state == COMMITTED_AREA_0) {
+    // area 0 is red
+    set_color(RGB(3,0,0));
+  } else if(current_decision_state == COMMITTED_AREA_1) {
+    // area 1 is green
+    set_color(RGB(0,3,0));
+  } else if(current_decision_state == COMMITTED_AREA_2) {
+    // area 2 is blue
+    set_color(RGB(0,0,3));
+  }
+#ifdef ARGOS_simulator_BUILD
+   // in ARGoS a white led is used to signal quorum state
+   // in ARK, due to perceptions errors, this is avoided
+   else if(current_decision_state == QUORUM_AREA_0 ||
+            current_decision_state == QUORUM_AREA_1 ||
+            current_decision_state == QUORUM_AREA_2) {
+    // white for quorum
+    set_color(RGB(3,3,3));
+  }
+#endif
+else {
+    // simply continue as uncommitted and explore
+    set_color(RGB(0,0,0));
+  }
+
+#ifdef DEBUG_KILOBOT
+  // store here kilobots decision for debug in ARGoS
+  debug_info_set(decision, current_decision_state);
+#endif
+}
+
+/*-------------------------------------------------------------------*/
+/* For Brodcast                                                      */
+/*-------------------------------------------------------------------*/
+/* Tell the kilobot to send its own state */
+void send_own_state() {
+    // fill my message before resetting the temp resource count
+    // fill up message type. Type 1 used for kbs
+    interactive_message.type = 1;
+    // fill up the current kb id
+    interactive_message.data[0] = kilo_uid;
+    // fill up the current states
+    interactive_message.data[1] = current_decision_state;
+    interactive_message.data[2] = current_arena_state;
+    // share my resource pop for all resources
+    uint8_t res_index;
+    for(res_index=0; res_index<RESOURCES_SIZE; res_index++) {
+      interactive_message.data[3+res_index] = resources_pops[res_index];
+    }
+
+    // hops count
+    interactive_message.data[6] = 0;
+
+    // last byte used for umax
+    interactive_message.data[8] = umax;
+
+    // fill up the crc
+    interactive_message.crc = message_crc(&interactive_message);
+
+    // tell that we have a msg to send
+    to_send_message = true;
+    // avoid rebroadcast to overwrite prev message
+    sent_message = 0;
+}
+
+/* Ask the kilobot to get a message to rebroadcast */
 void get_message_for_rebroadcast() {
   // -----------------------------
   // clean list (remove outdated messages)
@@ -828,6 +898,11 @@ void get_message_for_rebroadcast() {
     // compute crc again
     interactive_message.crc = message_crc(&interactive_message);
   }
+
+  // tell that we have a msg to send
+  to_send_message = true;
+  // avoid rebroadcast to overwrite prev message
+  sent_message = 0;
 }
 
 /*-------------------------------------------------------------------*/
@@ -841,22 +916,48 @@ void loop() {
  * until ARK signals otherwise (message type 2 and 3 are used for these operations)
  */
   if(release_the_broadcast) {
+    if(first_time_after_release) {
+     send_own_state();
+     first_time_after_release = 0;
+    } else if(sent_message) {
+      get_message_for_rebroadcast();
+    }
+
     // stop moving 
     set_motion(STOP);
     // signal broadcast using a white led (this will not be recognized by ARK)
     set_color(RGB(3,3,3));
-    // get next message for rebroadcast
-    if(sent_message) {
-      get_message_for_rebroadcast();
-    }
-    
-    // DO NOT DO ANYTHING ELSE
-    return;
-  }
-#endif
 
+    // do not do anything else (freeze)
+    return;
+  } 
+  
+  if(first_time_after_release) {
+    first_time_after_release = 0;
+    
+    // stop sending messages
+    to_send_message = 0;
+
+    // temp var for umax update
+    uint8_t temp_decision = current_decision_state;
+
+    // it is time to take the next decision
+    take_decision();
+    quorum_sensing();
+
+    // if I am working and was not on same area before
+    if(current_decision_state < 3 && current_decision_state != temp_decision) {
+      // update umax
+      umax = round(umax_temp*ema_alpha + umax*(1.0-ema_alpha));
+      // reset umax temp
+      umax_temp = 0;
+    }
+  }
+
+  /* always random walk, never stop even when exploiting */
+  random_walk();
+#else
   /*
-   * THIS PART IS COMMONG IN BOTH ARK AND ARGoS
    * if it is time to take decision after the exploration the fill up an update message for other kbs
    * then update utility estimation and take next decision according to the PFSM
    */
@@ -867,6 +968,8 @@ void loop() {
     // temp var for umax update
     uint8_t temp_decision = current_decision_state;
 
+    // sent my own state to other
+    send_own_state();
 
     // it is time to take the next decision
     take_decision();
@@ -880,86 +983,19 @@ void loop() {
       umax_temp = 0;
     }
 
-
-    // fill my message before resetting the temp resource count
-    // fill up message type. Type 1 used for kbs
-    interactive_message.type = 1;
-    // fill up the current kb id
-    interactive_message.data[0] = kilo_uid;
-    // fill up the current states
-    interactive_message.data[1] = current_decision_state;
-    interactive_message.data[2] = current_arena_state;
-    // share my resource pop for all resources
-    uint8_t res_index;
-    for(res_index=0; res_index<RESOURCES_SIZE; res_index++) {
-      interactive_message.data[3+res_index] = resources_pops[res_index];
-    }
-
-    // hops count
-    interactive_message.data[6] = 0;
-
-    // last byte used for umax
-    interactive_message.data[8] = umax;
-
-    // fill up the crc
-    interactive_message.crc = message_crc(&interactive_message);
-
-    // tell that we have a msg to send
-    to_send_message = true;
-
     // reset last decision ticks
     last_decision_ticks = kilo_ticks;
 
-  } 
-#ifdef ARGOS_simulator_BUILD
-  /* 
-  * in ARGoS we do not care about collisions between messages and simply rebroadcast at
-  * time intervals
-  */
-  else if(sent_message && broadcast_ticks <= kilo_ticks-last_broadcast_ticks) {
+  } else if(sent_message && broadcast_ticks <= kilo_ticks-last_broadcast_ticks) {
     get_message_for_rebroadcast();
     // reset flag for time
     last_broadcast_ticks = kilo_ticks;
   }
-#endif
-
-  /* 
-   * THIS PART IS COMMONG IN BOTH ARK AND ARGoS
-   * Now parse the decision and act accordingly
-   */
-  // if over the wanted resource turn on the right led color
-  if(current_decision_state == COMMITTED_AREA_0) {
-    set_color(RGB(3,0,0));
-  } else if(current_decision_state == COMMITTED_AREA_1) {
-    // area 1 is green
-    set_color(RGB(0,3,0));
-  } else if(current_decision_state == COMMITTED_AREA_2) {
-    // area 2 is blue
-    set_color(RGB(0,0,3));
-  }
-#ifdef ARGOS_simulator_BUILD
-   // in ARGoS a white led is used to signal quorum state
-   // in ARK, due to perceptions errors, this is avoided
-   else if(current_decision_state == QUORUM_AREA_0 ||
-            current_decision_state == QUORUM_AREA_1 ||
-            current_decision_state == QUORUM_AREA_2) {
-    // white for quorum
-    set_color(RGB(3,3,3));
-  }
-#endif
-else {
-    // simply continue as uncommitted and explore
-    set_color(RGB(0,0,0));
-  }
-
-#ifdef DEBUG_KILOBOT
-  // store here kilobots decision for debug in ARGoS
-  debug_info_set(decision, current_decision_state);
-#endif
 
   /* always random walk, never stop even when exploiting */
   random_walk();
- }
+#endif
+}
 
 int main() {
   kilo_init();
