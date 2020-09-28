@@ -163,8 +163,7 @@ private:
     QString log_filename_prefix = "log_complexity";
     QTextStream log_stream;
 
-    // GUI objects
-
+    // GUI objects (not currently used)
     QSpinBox *pop_spina, *pop_spinb, *pop_spinc;
     QDoubleSpinBox *eta_spina, *eta_spinb, *eta_spinc;
     QSpinBox *k_spina, *k_spinb, *k_spinc;

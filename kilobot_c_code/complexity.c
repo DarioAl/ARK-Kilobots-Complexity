@@ -376,30 +376,29 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
           // do not store
           return;
         }
-      }
 
-      // message is new, store it
-      node_t* new_node;
-      new_node = malloc(sizeof(node_t));
-      new_node->msg = *msg;
-      new_node->time_stamp=kilo_ticks;
-      new_node->been_rebroadcasted=false;
-      mtl_push_back(b_head, new_node);
+        // message is new, store it
+        node_t* new_node;
+        new_node = malloc(sizeof(node_t));
+        new_node->msg = *msg;
+        new_node->time_stamp=kilo_ticks;
+        new_node->been_rebroadcasted=false;
+        mtl_push_back(b_head, new_node);
 
-      // check received message and merge info and ema
-      if(msg->data[3] > 0) {
-        exponential_average(0, msg->data[3]);
+        // check received message and merge info and ema
+        if(msg->data[3] > 0) {
+          exponential_average(0, msg->data[3]);
+        }
+        if(msg->data[4] > 0) {
+          exponential_average(1, msg->data[4]);
+        }
+        if(msg->data[5] > 0) {
+          exponential_average(2, msg->data[5]);
+        }
+        // update umax
+        umax = (uint8_t)round(((float)msg->data[8]*(ema_alpha)) + ((float)umax*(1.0-ema_alpha)));
       }
-      if(msg->data[4] > 0) {
-        exponential_average(1, msg->data[4]);
-      }
-      if(msg->data[5] > 0) {
-        exponential_average(2, msg->data[5]);
-      }
-      // update umax
-      umax = (uint8_t)round(((float)msg->data[8]*(ema_alpha)) + ((float)umax*(1.0-ema_alpha)));
     }
-
   } else if(msg->type == 2 && !release_the_broadcast) { // only used within ARK 
     // save time to restore the variables after   
     last_release_time = kilo_ticks;
@@ -413,7 +412,7 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     last_decision_ticks = last_decision_ticks + kilo_ticks - last_release_time;
     // time to stop the broadcast
     release_the_broadcast = 0;
-    // set that is the first time that we received the signal to rebroadcast
+    // set that is the first time that we received the signal to stop rebroadcast
     first_time_after_release = 1;
   } else if(msg->type==120) {
     // kilobot signal id message (only used in ARK to avoid id assignment)
@@ -498,20 +497,15 @@ void take_decision() {
     uint8_t recruiter_state = 255;
 
     // if list non empty (computed in the clean right after the call to this)
-    if(list_size == 1) {
-      recruiter_state = b_head->msg.data[1];
-    } else if(list_size > 1) {
-      // extract a random node
-      uint8_t rand = round(((float)rand_soft()/255.0)*(list_size-1));
-      // retrieve the node
+    if(list_size > 0) {
+      uint8_t rand = rand_soft()%list_size;
       recruitment_message = b_head;
       while(recruitment_message && rand) {
         // set recruiter state
-        recruiter_state = recruitment_message->msg.data[1];
-
         recruitment_message = recruitment_message->next;
         rand = rand-1;
       }
+      recruiter_state = recruitment_message->msg.data[1];
     }
 
     // if the recruiter is committed
@@ -603,22 +597,18 @@ void take_decision() {
     // get list size
     uint16_t list_size = mtl_size(b_head);
     // if list non empty
-    if(list_size == 1) {
-      inhibitor_state = b_head->msg.data[1];
-    } else if(list_size > 1) {
-      // extract a random node
-      uint8_t rand = round(((float)rand_soft()/255.0)*(list_size-1));
-      // retrieve the node
+        // if list non empty (computed in the clean right after the call to this)
+    if(list_size > 0) {
+      uint8_t rand = rand_soft()%list_size;
       cross_message = b_head;
-      while(cross_message && rand>0) {
-        // set inhibitor state
-        inhibitor_state = cross_message->msg.data[1];
-
+      while(cross_message && rand) {
+        // set recruiter state
         cross_message = cross_message->next;
         rand = rand-1;
       }
+      inhibitor_state = cross_message->msg.data[1];
     }
-
+  
     // if the inhibitor is committed or in quorum but not same as us
     if(inhibitor_state != NOT_COMMITTED &&
        current_decision_state != inhibitor_state &&

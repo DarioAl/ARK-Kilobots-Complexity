@@ -21,7 +21,7 @@
 #include <QSignalMapper>
 #include <QFile>
 
-#define STOP_AFTER 3600
+#define STOP_AFTER 3600 + 1440
 #define SAVE_IMAGE_EVERY 5
 #define SAVE_LOG_EVERY 50
 
@@ -213,7 +213,7 @@ void mykilobotexperiment::run() {
 
     this->time += 0.1; // 10 ms
 
-    // stop after two hours
+    // stop after given time
     if(this->time >= STOP_AFTER) {
         // close the experiment
         this->stopExperiment();
@@ -221,6 +221,32 @@ void mykilobotexperiment::run() {
     }
 
     // update environment
+    qDebug() << "-----" << time;
+    qDebug() << "in update at time " << time;
+    qDebug() << "isCom " << complexityEnvironment.isCommunicationTime << " time elapsed " << this->time - complexityEnvironment.lastTransitionTime;
+    // switch between communication time and exploration time
+    if(!complexityEnvironment.isCommunicationTime && EXPLORATION_TIME <= this->time - complexityEnvironment.lastTransitionTime) {
+        complexityEnvironment.isCommunicationTime = true;
+        complexityEnvironment.lastTransitionTime = this->time;
+        kilobot_broadcast message;
+        message.type = 2; // 2 "communicate"
+        emit broadcastMessage(message);
+    } else if(complexityEnvironment.isCommunicationTime && COMMUNICATION_TIME <= this->time - complexityEnvironment.lastTransitionTime) {
+        complexityEnvironment.isCommunicationTime = false;
+        complexityEnvironment.lastTransitionTime = this->time;
+        kilobot_broadcast message;
+        message.type = 3; // 3 "stop communications"
+        emit broadcastMessage(message);
+    }
+
+    // emit continuosly the "communicate" or "stop communication message"
+    // do this only three time per second to avoid interferences
+    if(uint(this->time*10)%4) {
+        kilobot_broadcast message;
+        message.type = complexityEnvironment.isCommunicationTime?2:3; //2 "communicate" 3 "stop communications"
+        emit broadcastMessage(message);
+    }
+
     complexityEnvironment.time = (float)time;
     complexityEnvironment.ongoingRuntimeIdentification = this->runtimeIdentificationLock;
     complexityEnvironment.update();
@@ -238,39 +264,42 @@ void mykilobotexperiment::run() {
         plotEnvironment();
     }
 
-    // save image and log
-    if(qRound(this->time*10)%SAVE_IMAGE_EVERY == 0) {
-        if(saveImages) {
-            emit saveImage(QString("complexity_%1.jpg").arg(savedImagesCounter++, 5, 10, QChar('0')));
-        }
-    }
-    if(qRound(this->time*10)%SAVE_LOG_EVERY == 0) {
-        qDebug() << "LOG: saving at " << this->time*10;
-        // log kilobot positions
-        if(logExp) {
-            // count kilobots
-            uint8_t committed0 = 0;
-            uint8_t committed1 = 0;
-            uint8_t committed2 = 0;
-            uint8_t uncommitted = 0;
-            for(int i=0; i<kilobots_ids.size(); ++i) {
-                kilobot_id k_id = kilobots_ids.at(i);
-                if(complexityEnvironment.kilobots_colours.at(k_id) == Qt::red) {
-                    committed0++;
-                } else if(complexityEnvironment.kilobots_colours.at(k_id) == Qt::blue) {
-                    committed1++;
-                } else if(complexityEnvironment.kilobots_colours.at(k_id) == Qt::blue) {
-                    committed2++;
-                } else {
-                    uncommitted++;
-                }
-                log_stream
-                        << complexityEnvironment.resources.at(0)->population << " " << committed0
-                        << complexityEnvironment.resources.at(1)->population << " " << committed0
-                        << complexityEnvironment.resources.at(2)->population << " " << committed0
-                        << uncommitted;
+    // if in communication time do not save image and the log
+    if(!complexityEnvironment.isCommunicationTime) {
+        // save image and log
+        if(qRound(this->time*10)%SAVE_IMAGE_EVERY == 0) {
+            if(saveImages) {
+                emit saveImage(QString("complexity_%1.jpg").arg(savedImagesCounter++, 5, 10, QChar('0')));
             }
-            log_stream << endl;
+        }
+        if(qRound(this->time*10)%SAVE_LOG_EVERY == 0) {
+            qDebug() << "LOG: saving at " << this->time*10;
+            // log kilobot positions
+            if(logExp) {
+                // count kilobots
+                uint8_t committed0 = 0;
+                uint8_t committed1 = 0;
+                uint8_t committed2 = 0;
+                uint8_t uncommitted = 0;
+                for(int i=0; i<kilobots_ids.size(); ++i) {
+                    kilobot_id k_id = kilobots_ids.at(i);
+                    if(complexityEnvironment.kilobots_colours.at(k_id) == Qt::red) {
+                        committed0++;
+                    } else if(complexityEnvironment.kilobots_colours.at(k_id) == Qt::blue) {
+                        committed1++;
+                    } else if(complexityEnvironment.kilobots_colours.at(k_id) == Qt::blue) {
+                        committed2++;
+                    } else {
+                        uncommitted++;
+                    }
+                    log_stream
+                            << complexityEnvironment.resources.at(0)->population << " " << committed0
+                            << complexityEnvironment.resources.at(1)->population << " " << committed0
+                            << complexityEnvironment.resources.at(2)->population << " " << committed0
+                            << uncommitted;
+                }
+                log_stream << endl;
+            }
         }
     }
 }
@@ -357,6 +386,11 @@ QColor mykilobotexperiment::GetFloorColor(int track_x, int track_y) {
 }
 
 void mykilobotexperiment::plotEnvironment() {
+    // if in communication time do not save the images (clean video)
+    if(complexityEnvironment.isCommunicationTime) {
+        return;
+    }
+
     // clean image
     clearDrawingsOnRecordedImage();
 

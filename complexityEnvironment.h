@@ -25,6 +25,13 @@
 #include "resources.h"
 #include "area.h"
 
+
+#define ARENA_CENTER 750
+#define ARENA_SIZE 746
+
+#define EXPLORATION_TIME 5
+#define COMMUNICATION_TIME 2
+
 class mykilobotenvironment : public KilobotEnvironment {
  Q_OBJECT
 public:
@@ -40,8 +47,14 @@ public:
 
     float minTimeBetweenTwoMessages;    // minimum time between two messages
     double time;
+
     int ArenaX, ArenaY;
     bool ongoingRuntimeIdentification;
+
+    // used to implement the mechanism that switch between exploration and communication (i.e., robots not moving, experiments frozen)
+    double lastTransitionTime; // used to switch between exploration time and communication time
+    double lastCommunication; // used to transmit either the "communicate" or "stop communication" message three times per second
+    bool isCommunicationTime; // determine if the robots are communicating or explorations
 
 // signals and slots are used by qt to signal state changes to objects
 signals:

@@ -14,8 +14,8 @@
 #include <QtMath>
 #include <QColor>
 
-#define ARENA_CENTER 750
-#define ARENA_SIZE 746
+// if true, then send the total utility of the resources
+// #define REAL_UTILITY
 
 mykilobotenvironment::mykilobotenvironment(QObject *parent) : KilobotEnvironment(parent) {
     // environment specifications
@@ -42,21 +42,31 @@ void mykilobotenvironment::reset() {
     Resource* a = new Resource(0, ARENA_CENTER, area_radius, 1, oth_areas);
     Resource* b = new Resource(1, ARENA_CENTER, area_radius, 1, oth_areas);
     Resource* c = new Resource(2, ARENA_CENTER, area_radius, 1, oth_areas);
-
     resources.push_back(a);
     resources.push_back(b);
     resources.push_back(c);
+
+    isCommunicationTime = false;
+    lastTransitionTime = this->time;
 }
 
 void mykilobotenvironment::update() {
-    // update resources and areas
-    for(Resource* r : resources) {
-        r->doStep();
+    // if in communication time the enironment is frozen
+    if(!this->isCommunicationTime) {
+        // update resources and areas
+        for(Resource* r : resources) {
+            r->doStep();
+        }
     }
 }
 
 // generate virtual sensors reading and send it to the kbs (same as for ARGOS)
 void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
+    // if in communication time do nothing
+    if(this->isCommunicationTime) {
+        return;
+    }
+
     // update local arrays
     // update kilobot position
     kilobot_id k_id = kilobot_entity.getID();
@@ -75,8 +85,10 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
 
     // used to update working kilbots
     Qt::GlobalColor areaColors[3] = {Qt::red, Qt::green, Qt::blue};
+#ifndef REAL_UTILITY
     // used later for sending the utility
     double areasUt[3] = {0,0,0};
+#endif
     // initialize as on white space
     this->kilobots_states[k_id] = (KilobotEnvironment::kilobot_arena_state)255; // start as over no area
     // cycle over the resources
@@ -94,8 +106,10 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
                     this->kilobots_states[k_id] = (KilobotEnvironment::kilobot_arena_state)(this->kilobots_states[k_id]+r->type*3);
                 else
                     this->kilobots_states[k_id] = (KilobotEnvironment::kilobot_arena_state)r->type;
+#ifndef REAL_UTILITY
                 // update kb perception of utility (see below)
                 areasUt[r->type] = a->population;
+#endif
                 // break and go to the next resource
                 break;
             }
@@ -136,18 +150,30 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         // get the state
         KilobotEnvironment::kilobot_arena_state kst = this->kilobots_states[k_id];
         if(kst == INSIDE_AREA_0 || kst == INSIDE_AREA_01 || kst == INSIDE_AREA_02 || kst == INSIDE_AREA_012) {
+#ifdef REAL_UTILITY
+            uint8_t ut = ceil(resources.at(0)->population*3.1);
+#else
             uint8_t ut = ceil(areasUt[0]*31);
+#endif
             message.id = message.id | (ut >> 2);
             message.type = ut << 2;
         }
         if(kst == INSIDE_AREA_1 || kst == INSIDE_AREA_01 || kst == INSIDE_AREA_12 || kst == INSIDE_AREA_012) {
+#ifdef REAL_UTILITY
+            uint8_t ut = ceil(resources.at(1)->population*3.1);
+#else
             uint8_t ut = ceil(areasUt[1]*31);
+#endif
             message.type = message.type | (ut>>3);
             message.data = ut;
             message.data = message.data << 7;
         }
         if(kst == INSIDE_AREA_2 || kst == INSIDE_AREA_02 || kst == INSIDE_AREA_12 || kst == INSIDE_AREA_012) {
+#ifdef REAL_UTILITY
+            uint8_t ut = ceil(resources.at(2)->population*3.1);
+#else
             uint8_t ut = ceil(areasUt[2]*31);
+#endif
             message.data = message.data | (ut << 2);
         }
 
