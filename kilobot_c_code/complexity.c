@@ -61,14 +61,13 @@ typedef enum {
 motion_t current_motion_type = FORWARD;
 
 /* counters for motion, turning and random_walk */
-// TODO bring this back to 10 when using the big arena
-const float std_motion_steps = 5*31; // variance of the gaussian used to compute forward motion
+const float std_motion_steps = 10*31; // variance of the gaussian used to compute forward motion
 const float levy_exponent = 2; // 2 is brownian like motion (alpha)
 const float  crw_exponent = 0.0; // higher more straight (rho)
 uint32_t turning_ticks = 0; // keep count of ticks of turning
 const uint8_t max_turning_ticks = 80; /* constant to allow a maximum rotation of 180 degrees with \omega=\pi/5 */
 uint32_t straight_ticks = 0; // keep count of ticks of going straight
-const uint16_t max_straight_ticks = 5*31;
+const uint16_t max_straight_ticks = 2*31;
 uint32_t last_motion_ticks = 0;
 
 // the kb is biased toward the center when close to the border
@@ -153,7 +152,7 @@ message_t interactive_message;
 
 /* for broacasts */
 #ifdef ARGOS_simulator_BUILD
-// in ARGoS we do not need particular communication protocol, we 
+// in ARGoS we do not need particular communication protocol, we
 // do not care about collission and message propagation
 const uint32_t broadcast_ticks = 0*31; // one message every broadcast_ticks (not the same as below with ARK!)
 uint32_t last_broadcast_ticks = 0; // when last broadcast occurred
@@ -162,7 +161,7 @@ uint32_t last_broadcast_ticks = 0; // when last broadcast occurred
 // collision and medium overload
 char release_the_broadcast = 0; // if true, start broadcasting until false
 uint32_t last_release_time = 0; // used to restore the state of the kilobot after freezing it for broadcast
-char first_time_after_release = 0; 
+char first_time_after_release = 0;
 #endif
 
 /* messages are valid for valid_until ticks */
@@ -399,10 +398,11 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
         umax = (uint8_t)round(((float)msg->data[8]*(ema_alpha)) + ((float)umax*(1.0-ema_alpha)));
       }
     }
-  } else if(msg->type == 2 && !release_the_broadcast) { // only used within ARK 
-    // save time to restore the variables after   
+#ifndef ARGOS_simulator_BUILD
+  } else if(msg->type == 2 && !release_the_broadcast) { // only used within ARK
+    // save time to restore the variables after
     last_release_time = kilo_ticks;
-    // time to brodcast 
+    // time to brodcast
     release_the_broadcast = 1;
     // set that is the first time that we received the signal to rebroadcast
     first_time_after_release = 1;
@@ -414,6 +414,7 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     release_the_broadcast = 0;
     // set that is the first time that we received the signal to stop rebroadcast
     first_time_after_release = 1;
+#endif
   } else if(msg->type==120) {
     // kilobot signal id message (only used in ARK to avoid id assignment)
     // note that here the original ARK messages are used hence the id is assigned in the
@@ -460,6 +461,7 @@ void message_tx_success() {
 
 // scale ut between umin and umax
 uint8_t getScaledUtility(uint8_t ut) {
+  return ut;
   if(ut < umin || umin >= umax) {
     return 0;
   } else if (ut > umax) {
@@ -546,7 +548,6 @@ void take_decision() {
     /*   printf("in commitment and recruitment: %d, %d, %d\n", commitment, recruitment, extraction); */
     /* fflush(stdout); */
     /* } */
-
     // if the extracted number is less than commitment, then commit
     if(extraction < commitment) {
       current_decision_state = random_resource;
@@ -608,7 +609,7 @@ void take_decision() {
       }
       inhibitor_state = cross_message->msg.data[1];
     }
-  
+
     // if the inhibitor is committed or in quorum but not same as us
     if(inhibitor_state != NOT_COMMITTED &&
        current_decision_state != inhibitor_state &&
@@ -902,7 +903,7 @@ void loop() {
 
 #ifndef ARGOS_simulator_BUILD
 /*
- * if ARK is signaling to rebroacast, then the kilobots stops what they are doing and start rebroadcasting 
+ * if ARK is signaling to rebroacast, then the kilobots stops what they are doing and start rebroadcasting
  * until ARK signals otherwise (message type 2 and 3 are used for these operations)
  */
   if(release_the_broadcast) {
@@ -913,18 +914,18 @@ void loop() {
       get_message_for_rebroadcast();
     }
 
-    // stop moving 
+    // stop moving
     set_motion(STOP);
     // signal broadcast using a white led (this will not be recognized by ARK)
     set_color(RGB(3,3,3));
 
     // do not do anything else (freeze)
     return;
-  } 
-  
+  }
+
   if(first_time_after_release) {
     first_time_after_release = 0;
-    
+
     // stop sending messages
     to_send_message = 0;
 
@@ -934,6 +935,7 @@ void loop() {
     // it is time to take the next decision
     take_decision();
     quorum_sensing();
+    update_led_status();
 
     // if I am working and was not on same area before
     if(current_decision_state < 3 && current_decision_state != temp_decision) {
@@ -943,10 +945,7 @@ void loop() {
       umax_temp = 0;
     }
   }
-
-  /* always random walk, never stop even when exploiting */
-  random_walk();
-#else
+#else /* end ndef ARGOS_simulator_BUILD */
   /*
    * if it is time to take decision after the exploration the fill up an update message for other kbs
    * then update utility estimation and take next decision according to the PFSM
@@ -964,6 +963,7 @@ void loop() {
     // it is time to take the next decision
     take_decision();
     quorum_sensing();
+    update_led_status();
 
     // if I am working and was not on same area before
     if(current_decision_state < 3 && current_decision_state != temp_decision) {
@@ -981,10 +981,10 @@ void loop() {
     // reset flag for time
     last_broadcast_ticks = kilo_ticks;
   }
+#endif /* end ARGOS_simulator_BUILD */
 
   /* always random walk, never stop even when exploiting */
   random_walk();
-#endif
 }
 
 int main() {
