@@ -116,7 +116,6 @@ const float ema_alpha = 0.1;
 /* Umin threshold for the kb in 255/31 splice */
 const uint8_t umin = 153; //0.6
 /* Umax threshold for utility scaling between umin and umax */
-uint8_t umax_temp = 255; // do not change!
 uint8_t umax = 255; // do not change!
 
 /* Variables for Smart Arena messages */
@@ -130,8 +129,8 @@ uint8_t resources_pops[RESOURCES_SIZE]; // keep local knowledge about resources
 const float tau = 1;
 
 /* processes variables */
-const float h = 0.6666666; // determines the spontaneous (i.e. based on own information) processes weight
-const float k = 0.3333334; // determines the interactive (i.e. kilobot-kilobot) processes weight
+const float h = 0.1111111; // determines the spontaneous (i.e. based on own information) processes weight
+const float k = 0.8888889; // determines the interactive (i.e. kilobot-kilobot) processes weight
 
 /* explore for a bit, estimate the pop and then take a decision */
 /* the time of the kilobot is 31 ticks per second, no matter what time you set in ARGOS */
@@ -215,13 +214,8 @@ void exponential_average(uint8_t resource_id, uint8_t resource_pop) {
   // update by using exponential moving averagae to update estimated population
   resources_pops[resource_id] = (uint8_t)round(((float)resource_pop*(ema_alpha)) + ((float)resources_pops[resource_id]*(1.0-ema_alpha)));
 
-  // update umax temp if needd
-  if(resources_pops[resource_id] > umax_temp) {
-    umax_temp = resources_pops[resource_id];
-  }
-
 #ifdef DEBUG_KILOBOT
- /**** save DEBUG information ****/
+  /**** save DEBUG information ****/
   /* printf("DARIO rp %d - rps %d - ealpha %f \n", resource_pop, resources_pops[resource_id], ema_alpha); */
   /* printf("----------------------------- \n"); */
   /* fflush(stdout); */
@@ -305,7 +299,7 @@ void parse_smart_arena_data(uint8_t data[9], uint8_t kb_position) {
   if(rotation_slice == 3) {
     rotation_to_center = -M_PI/2;
   } else {
-    rotation_to_center = rotation_slice*M_PI/2;
+    rotation_to_center = (float)rotation_slice*M_PI/2;
   }
 }
 
@@ -367,8 +361,7 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
         b_head->next = NULL;
         b_head->time_stamp = kilo_ticks;
         b_head->been_rebroadcasted = false;
-
-      } else {
+     } else {
         // check if it has been parsed before
         // avoid resending same messages over and over again
         if(mtl_is_message_present(b_head, *msg)) {
@@ -461,7 +454,6 @@ void message_tx_success() {
 
 // scale ut between umin and umax
 uint8_t getScaledUtility(uint8_t ut) {
-  return ut;
   if(ut < umin || umin >= umax) {
     return 0;
   } else if (ut > umax) {
@@ -469,7 +461,7 @@ uint8_t getScaledUtility(uint8_t ut) {
   } else {
     float num = ut - umin;
     float den = umax - umin;
-    return round(255*(num/den));
+    return round((num/den)*255);
   }
 }
 
@@ -486,11 +478,8 @@ void take_decision() {
 
     // if over umin threshold
     uint8_t random_resource = rand_soft()%RESOURCES_SIZE;
-    if(resources_pops[random_resource] > umin) {
-      // normalized between 0 and 255
-      commitment = round(getScaledUtility(resources_pops[random_resource])*h*tau);
-    }
-
+    // normalized between 0 and 255
+    commitment = round(getScaledUtility(resources_pops[random_resource])*h*tau);
     /****************************************************/
     /* recruitment over a random agent                  */
     /****************************************************/
@@ -520,7 +509,7 @@ void take_decision() {
       }
       // if over umin threshold
       if(resources_pops[resource_index] > umin) {
-        // computer recruitment value for current agent
+        // compute recruitment value for current agent
         recruitment = floor(getScaledUtility(resources_pops[resource_index])*k*tau);
       }
     }
@@ -530,7 +519,7 @@ void take_decision() {
     /****************************************************/
     /* check if the sum of all processes is below 1 (here 255 since normalize to uint_8) */
     /*                                  STOP                                              */
-    if(commitment+recruitment > 255) {
+    if((uint16_t)commitment+(uint16_t)recruitment > 255) {
 #ifdef DEBUG_KILOBOT
       printf("in commitment and recruitment: %d, %d\n", commitment, recruitment);
       fflush(stdout);
@@ -585,7 +574,7 @@ void take_decision() {
 
     /* leave immediately if reached the threshold */
     if(resources_pops[resource_index] <= umin) {
-      abandon = 255*h*tau;
+      abandon = round(255.0*h*tau);
     }
 
     /****************************************************/
@@ -633,7 +622,7 @@ void take_decision() {
     /****************************************************/
     /* check if the sum of all processes is below 1 (here 255 since normalize to uint_8) */
     /*                                  STOP                                             */
-    if(abandon+cross_inhibition > 255) {
+    if((uint16_t)abandon+(uint16_t)cross_inhibition > 255) {
 #ifdef DEBUG_KILOBOT
       printf("in abandon plus cross \n");
       fflush(stdout);
@@ -767,7 +756,7 @@ void quorum_sensing() {
     node_t* temp = b_head;
     // cycle over all messages in the buffer
     while(temp) {
-      // if already consider skip
+      // if already considered skip
       if(!parsed[temp->msg.data[0]]) {
         // if committed or quorum to same resource then we have a friend
         // the following works because 255 for current_decision_state is not an option
@@ -785,7 +774,7 @@ void quorum_sensing() {
       temp = temp->next;
     }
     // compute quorum and eventually switch to committed
-    if(((float)neighbors*quorum_threshold) <= friends) {
+    if(neighbors > 0 && ((float)neighbors*quorum_threshold) <= friends) {
       current_decision_state = current_decision_state-3;
     }
   }
@@ -861,15 +850,16 @@ void send_own_state() {
 
 /* Ask the kilobot to get a message to rebroadcast */
 void get_message_for_rebroadcast() {
+  // random prob of 20% of sending own message again
+  // this cope with inefficient communication on the real kilobots
+  if(rand_soft() >= 204) {
+    send_own_state();
+    return;
+  }
+
   // -----------------------------
   // clean list (remove outdated messages)
   list_size = mtl_clean_old(&b_head, kilo_ticks-valid_until);
-
-  // or clean list completely
-  //mtl_clean_list(&b_head);
-  //list_size = 0;
-  // -----------------------------
-
 
   // get first not rebroadcasted message from flooding buffer
   node_t* not_rebroadcasted = NULL;
@@ -881,6 +871,8 @@ void get_message_for_rebroadcast() {
     not_rebroadcasted->been_rebroadcasted = true;
     // tell that we have a msg to send
     to_send_message = true;
+    // avoid rebroadcast to overwrite prev message
+    sent_message = 0;
     // set it up for rebroadcast
     interactive_message.type = 1;
     memcpy(interactive_message.data, not_rebroadcasted->msg.data, sizeof(uint8_t));
@@ -890,17 +882,27 @@ void get_message_for_rebroadcast() {
     interactive_message.crc = message_crc(&interactive_message);
   }
 
-  // tell that we have a msg to send
-  to_send_message = true;
-  // avoid rebroadcast to overwrite prev message
-  sent_message = 0;
+}
+
+void update_umax(decision_t temp_decision) {
+  // if I am working and was not on same area before
+  if(current_decision_state < 3 && current_decision_state != temp_decision) {
+    // take the maximum population
+    uint8_t t_max = resources_pops[0];
+    if(t_max < resources_pops[1]) t_max = resources_pops[1];
+    if(t_max < resources_pops[2]) t_max = resources_pops[2];
+
+    // update umax
+    umax = round(t_max*ema_alpha + umax*(1.0-ema_alpha));
+  if(kilo_uid == 0)
+    printf("umax %d \n", umax);
+  }
 }
 
 /*-------------------------------------------------------------------*/
 /* Main loop                                                         */
 /*-------------------------------------------------------------------*/
 void loop() {
-
 #ifndef ARGOS_simulator_BUILD
 /*
  * if ARK is signaling to rebroacast, then the kilobots stops what they are doing and start rebroadcasting
@@ -936,17 +938,35 @@ void loop() {
     take_decision();
     quorum_sensing();
     update_led_status();
-
-    // if I am working and was not on same area before
-    if(current_decision_state < 3 && current_decision_state != temp_decision) {
-      // update umax
-      umax = round(umax_temp*ema_alpha + umax*(1.0-ema_alpha));
-      // reset umax temp
-      umax_temp = 0;
-    }
-  }
+    update_umax(temp_decision);
+ }
 #else /* end ndef ARGOS_simulator_BUILD */
-  /*
+
+#ifdef DEBUG_KILOBOT
+  // store the number of different messages received (for debug purposes)
+  // avoid considering same neighbor
+  char parsed[255] = {0};
+  uint8_t different = 0;
+
+  node_t* temp = b_head;
+  // cycle over all messages in the buffer
+  while(temp) {
+    // if already considered skip
+    if(!parsed[temp->msg.data[0]]) {
+      // if committed or quorum to same resource then we have a friend
+      // the following works because 255 for current_decision_state is not an option
+      different++;
+      // set has parsed
+      parsed[temp->msg.data[0]] = 1;
+    }
+    // increment temp
+    temp = temp->next;
+  }
+  // store here kilobots decision for debug in ARGoS
+  debug_info_set(num_messages, different);
+#endif
+
+   /*
    * if it is time to take decision after the exploration the fill up an update message for other kbs
    * then update utility estimation and take next decision according to the PFSM
    */
@@ -957,21 +977,16 @@ void loop() {
     // temp var for umax update
     uint8_t temp_decision = current_decision_state;
 
-    // sent my own state to other
-    send_own_state();
-
     // it is time to take the next decision
     take_decision();
     quorum_sensing();
     update_led_status();
 
-    // if I am working and was not on same area before
-    if(current_decision_state < 3 && current_decision_state != temp_decision) {
-      // update umax
-      umax = round(umax_temp*ema_alpha + umax*(1.0-ema_alpha));
-      // reset umax temp
-      umax_temp = 0;
-    }
+    // sent my own state to other
+    send_own_state();
+
+    // update umax
+    update_umax(temp_decision);
 
     // reset last decision ticks
     last_decision_ticks = kilo_ticks;
