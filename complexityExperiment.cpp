@@ -23,7 +23,7 @@
 
 #define STOP_AFTER 3600 + 1440
 #define SAVE_IMAGE_EVERY 5
-#define SAVE_LOG_EVERY 50
+#define SAVE_LOG_EVERY 5
 
 // return pointer to interface!
 // mykilobotexperiment can and should be completely hidden from the application
@@ -221,9 +221,6 @@ void mykilobotexperiment::run() {
     }
 
     // update environment
-    qDebug() << "-----" << time;
-    qDebug() << "in update at time " << time;
-    qDebug() << "isCom " << complexityEnvironment.isCommunicationTime << " time elapsed " << this->time - complexityEnvironment.lastTransitionTime;
     // switch between communication time and exploration time
     if(!complexityEnvironment.isCommunicationTime && EXPLORATION_TIME <= this->time - complexityEnvironment.lastTransitionTime) {
         complexityEnvironment.isCommunicationTime = true;
@@ -236,15 +233,40 @@ void mykilobotexperiment::run() {
         complexityEnvironment.lastTransitionTime = this->time;
         kilobot_broadcast message;
         message.type = 3; // 3 "stop communications"
+#ifdef GLOBAL_QUORUM
+        // compute quorum status for all kilobots
+        uint totaleRed, totalGreen, totalBlue = 0;
+
+        for(uint id = 0; id<complexityEnvironment.kilobots_quorum.size(); id++) {
+            if(complexityEnvironment.kilobots_quorum[id][0] > complexityEnvironment.kilobots_quorum[id][1] &&
+                    complexityEnvironment.kilobots_quorum[id][0] > complexityEnvironment.kilobots_quorum[id][2]) {
+                totaleRed++;
+            } else if(complexityEnvironment.kilobots_quorum[id][1] > complexityEnvironment.kilobots_quorum[id][2]) {
+                totalGreen++;
+            } else {
+                totalBlue++;
+            }
+        }
+
+        // clear the quorum list
+        complexityEnvironment.kilobots_quorum.clear();
+
+        // add the overall quorum values at pos 0(red) 1(green) 2(blue)
+        message.data = {0,0,0,0,0,0,0,0,0};
+        message.data[0] = totaleRed;
+        message.data[1] = totalGreen;
+        message.data[2] = totalBlue;
+#endif
         emit broadcastMessage(message);
     }
 
     // emit continuosly the "communicate" or "stop communication message"
-    // do this only three time per second to avoid interferences
-    if(uint(this->time*10)%4) {
+    // do this few times per second to avoid interferences
+    if(uint(this->time*10)%10 == 0) {
         kilobot_broadcast message;
         message.type = complexityEnvironment.isCommunicationTime?2:3; //2 "communicate" 3 "stop communications"
         emit broadcastMessage(message);
+        qDebug() << "re-emitting at time " << time;
     }
 
     complexityEnvironment.time = (float)time;
@@ -386,11 +408,6 @@ QColor mykilobotexperiment::GetFloorColor(int track_x, int track_y) {
 }
 
 void mykilobotexperiment::plotEnvironment() {
-    // if in communication time do not save the images (clean video)
-    if(complexityEnvironment.isCommunicationTime) {
-        return;
-    }
-
     // clean image
     clearDrawingsOnRecordedImage();
 

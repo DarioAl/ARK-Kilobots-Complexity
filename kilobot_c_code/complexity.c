@@ -105,8 +105,9 @@ typedef enum {
 arena_t current_arena_state = OUTSIDE_AREA;
 decision_t current_decision_state = NOT_COMMITTED;
 
-/* quorum sensing variable */
+/* quorum sensing variables */
 float quorum_threshold = 0;
+uint8_t real_quorum[RESOURCES_SIZE]  = {255,255,255}; // keep this as > 127
 
 /* variable to signal internal computation error */
 uint8_t internal_error = 0;
@@ -400,6 +401,12 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     // set that is the first time that we received the signal to rebroadcast
     first_time_after_release = 1;
   } else if(msg->type == 3 && release_the_broadcast) { // only used within ARK
+    // check if ARK is communicating the quorum and store it
+    if(msg->data[0]>0 && msg->data[1]>0 && msg->data[2]>0) {
+      real_quorum[0] = msg->data[0];
+      real_quorum[1] = msg->data[1];
+      real_quorum[2] = msg->data[2];
+    }
     // update variables to restore the kilobot at its previous state
     last_motion_ticks = last_motion_ticks + kilo_ticks - last_release_time;
     last_decision_ticks = last_decision_ticks + kilo_ticks - last_release_time;
@@ -735,9 +742,11 @@ void setup() {
   set_color(RGB(0,0,0));
   /* Initialise motion variables */
   set_motion(FORWARD);
+  /* Initialize quorum vars and resources */
   uint8_t i;
   for(i=0; i<RESOURCES_SIZE; i++) {
     resources_pops[i] = 0;
+    real_quorum[i] = 255; // 255 means we still don't know which mechanism to use
   }
 }
 
@@ -749,32 +758,44 @@ void quorum_sensing() {
   if(quorum_threshold > 0 &&
      current_decision_state > 2 &&
      current_decision_state != NOT_COMMITTED) {
+
     uint8_t neighbors = 0; // the total number of agents sensed
     uint8_t friends = 0; // the number of agents with same quorum state
 
-    // avoid considering same neighbor
-    char parsed[255] = {0};
+    /* 
+    * we here implement both real quorum (i.e., ARK perceptions broadcasted to the kilobots see message_rx)
+    * and perceived quorum (i.e., as perceived by the kilobots)
+    * If any of the value in the array is 255, then the latter is implemented
+    */
+    if(real_quorum[0]<255 && real_quorum[1]<255 && real_quorum[2]<255) { 
+      neighbors = real_quorum[0] + real_quorum[1] + real_quorum[2];
+      friends = real_quorum[current_decision_state-3];
+    } else {
+      // avoid considering same neighbor
+      char parsed[255] = {0};
 
-    node_t* temp = b_head;
-    // cycle over all messages in the buffer
-    while(temp) {
-      // if already considered skip
-      if(!parsed[temp->msg.data[0]]) {
-        // if committed or quorum to same resource then we have a friend
-        // the following works because 255 for current_decision_state is not an option
-        if(temp->msg.data[1] == current_decision_state ||
-           temp->msg.data[1]-3 == current_decision_state ||
-           temp->msg.data[1]+3 == current_decision_state) {
-          friends++;
+      node_t* temp = b_head;
+      // cycle over all messages in the buffer
+      while(temp) {
+        // if already considered skip
+        if(!parsed[temp->msg.data[0]]) {
+          // if committed or quorum to same resource then we have a friend
+          // the following works because 255 for current_decision_state is not an option
+          if(temp->msg.data[1] == current_decision_state ||
+            temp->msg.data[1]-3 == current_decision_state ||
+            temp->msg.data[1]+3 == current_decision_state) {
+            friends++;
+          }
+          // increment the number of neighbors
+          neighbors++;
+          // set has parsed
+          parsed[temp->msg.data[0]] = 1;
         }
-        // increment the number of neighbors
-        neighbors++;
-        // set has parsed
-        parsed[temp->msg.data[0]] = 1;
+        // increment temp
+        temp = temp->next;
       }
-      // increment temp
-      temp = temp->next;
     }
+    
     // compute quorum and eventually switch to committed
     if(neighbors > 0 && ((float)neighbors*quorum_threshold) <= friends) {
       current_decision_state = current_decision_state-3;
@@ -921,11 +942,11 @@ void loop() {
     // stop moving
     set_motion(STOP);
     // led of current status (used for debug and global quorum sensing)
-    if(current_decision_state = 0 || current_decision_state == 3) {
+    if(current_decision_state == 0 || current_decision_state == 3) {
       set_color(RGB(3,0,0));
-    } else if(current_decision_state = 1 || current_decision_state == 4) {
+    } else if(current_decision_state == 1 || current_decision_state == 4) {
       set_color(RGB(0,3,0));
-    } else if(current_decision_state = 2 || current_decision_state == 5) {
+    } else if(current_decision_state == 2 || current_decision_state == 5) {
       set_color(RGB(0,0,3));
     }
 

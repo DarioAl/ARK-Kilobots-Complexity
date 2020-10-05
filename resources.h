@@ -74,8 +74,6 @@ public:
         this->exploitation = "quadratic";
         re.seed(qrand());
 
-
-
         if(type==0)
             this->colour = QColor(Qt::red);
         else if(type==1)

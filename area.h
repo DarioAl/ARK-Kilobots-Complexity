@@ -80,7 +80,7 @@ public:
         this->population = this->population - exploitation + growth;
 
         // trick to restore areas that went to low (usually due to bad led readings)
-        if(this->population <= 0.0001) {
+        if(this->population <= 0.001) {
             this->population = 0.001;
         }
 

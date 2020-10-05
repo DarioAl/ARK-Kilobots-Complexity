@@ -14,9 +14,6 @@
 #include <QtMath>
 #include <QColor>
 
-// if true, then send the total utility of the resources
-// #define REAL_UTILITY
-
 mykilobotenvironment::mykilobotenvironment(QObject *parent) : KilobotEnvironment(parent) {
     // environment specifications
     this->ArenaX = 0.5;
@@ -36,6 +33,8 @@ void mykilobotenvironment::reset() {
     resources.clear();
     kilobots_states.clear();
     kilobots_positions.clear();
+    kilobots_colours.clear();
+    kilobots_quorum.clear();
 
     QVector<Area> oth_areas;
     double area_radius = 146;
@@ -62,11 +61,6 @@ void mykilobotenvironment::update() {
 
 // generate virtual sensors reading and send it to the kbs (same as for ARGOS)
 void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
-    // if in communication time do nothing
-    if(this->isCommunicationTime) {
-        return;
-    }
-
     // update local arrays
     // update kilobot position
     kilobot_id k_id = kilobot_entity.getID();
@@ -82,6 +76,27 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         this->kilobots_colours[k_id] = Qt::blue;    // committed resource 2
     else
         this->kilobots_colours[k_id] = Qt::black;   // uncommitted
+
+    // if in communication time only update kilobots but avoid sending information to them
+    if(this->isCommunicationTime) {
+#ifdef GLOBAL_QUORUM
+        // store for quorum
+        if(kilobots_quorum.empty()) { // only first time, list is cleared in complexityExperiment
+            QVector<uint8_t> colors_hits;
+            kilobots_colours[k_id]==Qt::red?colors_hits.append(1):colors_hits.append(0);
+            kilobots_colours[k_id]==Qt::green?colors_hits.append(1):colors_hits.append(0);
+            kilobots_colours[k_id]==Qt::blue?colors_hits.append(1):colors_hits.append(0);
+            kilobots_quorum.append(colors_hits);
+        } else if(kilobots_colours[k_id]==Qt::red) {
+            kilobots_quorum[k_id][0] = kilobots_quorum[k_id][0]+1;
+        } else if(kilobots_colours[k_id]==Qt::green) {
+            kilobots_quorum[k_id][1] = kilobots_quorum[k_id][1]+1;
+        } else if(kilobots_colours[k_id]==Qt::blue) {
+            kilobots_quorum[k_id][2] = kilobots_quorum[k_id][2]+1;
+        }
+#endif
+        return;
+    }
 
     // used to update working kilbots
     Qt::GlobalColor areaColors[3] = {Qt::red, Qt::green, Qt::blue};
@@ -115,6 +130,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
             }
         }
     }
+
     // now we have everything up to date and everything we need
     // then if it is time to send the message to the kilobot send info to the kb
     if(this->time - this->lastSent[k_id] > minTimeBetweenTwoMessages && !ongoingRuntimeIdentification){
@@ -151,7 +167,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         KilobotEnvironment::kilobot_arena_state kst = this->kilobots_states[k_id];
         if(kst == INSIDE_AREA_0 || kst == INSIDE_AREA_01 || kst == INSIDE_AREA_02 || kst == INSIDE_AREA_012) {
 #ifdef REAL_UTILITY
-            uint8_t ut = ceil(resources.at(0)->population*3.1);
+            uint8_t ut = ceil(resources.at(0)->population/resources.at(0)->areas.size()*31);
 #else
             uint8_t ut = ceil(areasUt[0]*31);
 #endif
@@ -160,7 +176,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         }
         if(kst == INSIDE_AREA_1 || kst == INSIDE_AREA_01 || kst == INSIDE_AREA_12 || kst == INSIDE_AREA_012) {
 #ifdef REAL_UTILITY
-            uint8_t ut = ceil(resources.at(1)->population*3.1);
+            uint8_t ut = ceil(resources.at(1)->population/resources.at(1)->areas.size()*31);
 #else
             uint8_t ut = ceil(areasUt[1]*31);
 #endif
@@ -170,7 +186,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         }
         if(kst == INSIDE_AREA_2 || kst == INSIDE_AREA_02 || kst == INSIDE_AREA_12 || kst == INSIDE_AREA_012) {
 #ifdef REAL_UTILITY
-            uint8_t ut = ceil(resources.at(2)->population*3.1);
+            uint8_t ut = ceil(resources.at(2)->population/resources.at(2)->areas.size()*31);
 #else
             uint8_t ut = ceil(areasUt[2]*31);
 #endif

@@ -29,8 +29,13 @@
 #define ARENA_CENTER 750
 #define ARENA_SIZE 746
 
-#define EXPLORATION_TIME 5
-#define COMMUNICATION_TIME 2
+#define EXPLORATION_TIME 5 // in seconds
+#define COMMUNICATION_TIME 2 // in seconds
+
+// if true, quorum is perceived and sent by ARK
+#define GLOBAL_QUORUM
+// if true, then send the total utility of the resources
+#define REAL_UTILITY
 
 class mykilobotenvironment : public KilobotEnvironment {
  Q_OBJECT
@@ -42,7 +47,8 @@ public:
 
     QVector<Resource*> resources; // list of all resources present in the experiment
     QVector<QPointF> kilobots_positions;    // list of all kilobots positions
-    QVector<QColor> kilobots_colours;  // list of all kilobots led colours, the led indicate committed (red), working (green) and uncommiited (blue)
+    QVector<QColor> kilobots_colours;  // list of all kilobots led colours, the led indicate the resource to which the kb is committed (red, green, blue)
+    QVector<QVector<uint8_t>> kilobots_quorum; // list of quorum states of the kilobots as perceived during the broadcast phase (the one perceived more counts)
     QVector<float> lastSent;    // when the last message was sent to the kb at given position
 
     float minTimeBetweenTwoMessages;    // minimum time between two messages
