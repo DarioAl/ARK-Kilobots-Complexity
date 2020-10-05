@@ -407,6 +407,8 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     release_the_broadcast = 0;
     // set that is the first time that we received the signal to stop rebroadcast
     first_time_after_release = 1;
+    // turn of leds
+    set_color(RGB(0,0,0));
 #endif
   } else if(msg->type==120) {
     // kilobot signal id message (only used in ARK to avoid id assignment)
@@ -918,8 +920,14 @@ void loop() {
 
     // stop moving
     set_motion(STOP);
-    // signal broadcast using a white led (this will not be recognized by ARK)
-    set_color(RGB(3,3,3));
+    // led of current status (used for debug and global quorum sensing)
+    if(current_decision_state = 0 || current_decision_state == 3) {
+      set_color(RGB(3,0,0));
+    } else if(current_decision_state = 1 || current_decision_state == 4) {
+      set_color(RGB(0,3,0));
+    } else if(current_decision_state = 2 || current_decision_state == 5) {
+      set_color(RGB(0,0,3));
+    }
 
     // do not do anything else (freeze)
     return;
