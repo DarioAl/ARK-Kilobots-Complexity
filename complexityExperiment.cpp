@@ -21,7 +21,7 @@
 #include <QSignalMapper>
 #include <QFile>
 
-#define STOP_AFTER 3600 + 1440
+#define STOP_AFTER 3600 + 3600
 #define SAVE_IMAGE_EVERY 5
 #define SAVE_LOG_EVERY 5
 
@@ -235,9 +235,9 @@ void mykilobotexperiment::run() {
         message.type = 3; // 3 "stop communications"
 #ifdef GLOBAL_QUORUM
         // compute quorum status for all kilobots
-        uint totaleRed, totalGreen, totalBlue = 0;
+        uint8_t totaleRed, totalGreen, totalBlue = 0;
 
-        for(uint id = 0; id<complexityEnvironment.kilobots_quorum.size(); id++) {
+        for(int id = 0; id<complexityEnvironment.kilobots_quorum.size(); id++) {
             if(complexityEnvironment.kilobots_quorum[id][0] > complexityEnvironment.kilobots_quorum[id][1] &&
                     complexityEnvironment.kilobots_quorum[id][0] > complexityEnvironment.kilobots_quorum[id][2]) {
                 totaleRed++;
@@ -246,10 +246,9 @@ void mykilobotexperiment::run() {
             } else {
                 totalBlue++;
             }
+            // reset current quorum value
+            complexityEnvironment.kilobots_quorum[id] = {0,0,0};
         }
-
-        // clear the quorum list
-        complexityEnvironment.kilobots_quorum.clear();
 
         // add the overall quorum values at pos 0(red) 1(green) 2(blue)
         message.data = {0,0,0,0,0,0,0,0,0};
@@ -266,7 +265,6 @@ void mykilobotexperiment::run() {
         kilobot_broadcast message;
         message.type = complexityEnvironment.isCommunicationTime?2:3; //2 "communicate" 3 "stop communications"
         emit broadcastMessage(message);
-        qDebug() << "re-emitting at time " << time;
     }
 
     complexityEnvironment.time = (float)time;
@@ -350,6 +348,9 @@ void mykilobotexperiment::setupInitialKilobotState(Kilobot kilobot_entity) {
     }
     if(complexityEnvironment.kilobots_colours.size() < k_id+1) {
         complexityEnvironment.kilobots_colours.resize(k_id+1);
+    }
+    if(complexityEnvironment.kilobots_quorum.size() < k_id+1) {
+        complexityEnvironment.kilobots_quorum.resize(k_id+1);
     }
 
 

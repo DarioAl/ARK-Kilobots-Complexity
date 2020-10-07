@@ -34,7 +34,14 @@ void mykilobotenvironment::reset() {
     kilobots_states.clear();
     kilobots_positions.clear();
     kilobots_colours.clear();
+
+    // generate quorum array
     kilobots_quorum.clear();
+    QVector<uint8_t> colors_hits = {0,0,0};
+    // add 127 (max kilobots allowed)
+    for(uint i=0; i<127; i++){
+        kilobots_quorum.push_back(colors_hits);
+    }
 
     QVector<Area> oth_areas;
     double area_radius = 146;
@@ -81,13 +88,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
     if(this->isCommunicationTime) {
 #ifdef GLOBAL_QUORUM
         // store for quorum
-        if(kilobots_quorum.empty()) { // only first time, list is cleared in complexityExperiment
-            QVector<uint8_t> colors_hits;
-            kilobots_colours[k_id]==Qt::red?colors_hits.append(1):colors_hits.append(0);
-            kilobots_colours[k_id]==Qt::green?colors_hits.append(1):colors_hits.append(0);
-            kilobots_colours[k_id]==Qt::blue?colors_hits.append(1):colors_hits.append(0);
-            kilobots_quorum.append(colors_hits);
-        } else if(kilobots_colours[k_id]==Qt::red) {
+        if(kilobots_colours[k_id]==Qt::red) {
             kilobots_quorum[k_id][0] = kilobots_quorum[k_id][0]+1;
         } else if(kilobots_colours[k_id]==Qt::green) {
             kilobots_quorum[k_id][1] = kilobots_quorum[k_id][1]+1;
@@ -167,7 +168,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         KilobotEnvironment::kilobot_arena_state kst = this->kilobots_states[k_id];
         if(kst == INSIDE_AREA_0 || kst == INSIDE_AREA_01 || kst == INSIDE_AREA_02 || kst == INSIDE_AREA_012) {
 #ifdef REAL_UTILITY
-            uint8_t ut = ceil(resources.at(0)->population/resources.at(0)->areas.size()*31);
+            uint8_t ut = ceil(resources.at(0)->population*31);
 #else
             uint8_t ut = ceil(areasUt[0]*31);
 #endif
@@ -176,7 +177,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         }
         if(kst == INSIDE_AREA_1 || kst == INSIDE_AREA_01 || kst == INSIDE_AREA_12 || kst == INSIDE_AREA_012) {
 #ifdef REAL_UTILITY
-            uint8_t ut = ceil(resources.at(1)->population/resources.at(1)->areas.size()*31);
+            uint8_t ut = ceil(resources.at(1)->population*31);
 #else
             uint8_t ut = ceil(areasUt[1]*31);
 #endif
@@ -186,7 +187,7 @@ void mykilobotenvironment::updateVirtualSensor(Kilobot kilobot_entity) {
         }
         if(kst == INSIDE_AREA_2 || kst == INSIDE_AREA_02 || kst == INSIDE_AREA_12 || kst == INSIDE_AREA_012) {
 #ifdef REAL_UTILITY
-            uint8_t ut = ceil(resources.at(2)->population/resources.at(2)->areas.size()*31);
+            uint8_t ut = ceil(resources.at(2)->population*31);
 #else
             uint8_t ut = ceil(areasUt[2]*31);
 #endif

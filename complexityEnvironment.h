@@ -30,7 +30,7 @@
 #define ARENA_SIZE 746
 
 #define EXPLORATION_TIME 5 // in seconds
-#define COMMUNICATION_TIME 2 // in seconds
+#define COMMUNICATION_TIME 5 // in seconds
 
 // if true, quorum is perceived and sent by ARK
 #define GLOBAL_QUORUM

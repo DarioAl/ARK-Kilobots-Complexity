@@ -147,8 +147,13 @@ uint8_t sent_message = 1;
 /* turn this flag on if there is a valid message to send */
 uint8_t to_send_message = false;
 
-/* current kb message out */
+/* for kb messages out */
 message_t interactive_message;
+node_t* last_rebroadcasted;
+
+/* avoid concurrent accesses to the list of interactive messages */
+char to_parse_semaphore;
+message_t to_parse_message;
 
 /* for broacasts */
 #ifdef ARGOS_simulator_BUILD
@@ -243,7 +248,7 @@ void exponential_average(uint8_t resource_id, uint8_t resource_pop) {
 /*-------------------------------------------------------------------*/
 
 /* see next function for specification of what is done here */
-void parse_smart_arena_data(uint8_t data[9], uint8_t kb_position) {
+void parse_smart_arena_message(uint8_t data[9], uint8_t kb_position) {
   // update message count
   messages_count++;
 
@@ -304,6 +309,65 @@ void parse_smart_arena_data(uint8_t data[9], uint8_t kb_position) {
   }
 }
 
+void parse_interactive_message() {
+  /* ----------------------------------*/
+  /* KB interactive message            */
+  /* ----------------------------------*/
+  char to_consider = 0;
+  // store the message in the buffer for flooding and dm
+  // check if it has been parsed before and if enough time is passed, update it
+  // avoid resending same messages over and over again
+  int16_t m_pos = mtl_is_message_present(b_head, to_parse_message);
+  node_t* t_node;
+  if(m_pos < 0) {
+    // message is new, store it
+    t_node = malloc(sizeof(node_t));
+    t_node->msg = to_parse_message;
+    
+    // green light for the rx callback
+    to_parse_semaphore = 0;
+
+    t_node->time_stamp=kilo_ticks;
+    t_node->been_rebroadcasted=false;
+    if(b_head == NULL) {
+      *b_head = *t_node;
+    } else {
+      mtl_push_back(b_head, t_node);
+    }
+    // consider this message information for local updates
+    to_consider = 1;
+  } else {
+    // get the pointer for update
+    t_node = mtl_get_at(b_head, m_pos);
+    // if old enough (~1 sec)
+    if(t_node->time_stamp < kilo_ticks - 31) {
+      t_node->msg = to_parse_message; // update content
+  
+      // green light for the rx callback
+      to_parse_semaphore = 0;
+
+      t_node->been_rebroadcasted = 0; // signal to rebroadcast
+      t_node->time_stamp = kilo_ticks; // update reception time
+      // consider this message information for local updates
+      to_consider = 1;
+    }
+  }
+
+  if(to_consider) {
+    // check received message and merge info and ema
+    if(t_node->msg.data[3] > 0) {
+      exponential_average(0, t_node->msg.data[3]);
+    }
+    if(t_node->msg.data[4] > 0) {
+      exponential_average(1, t_node->msg.data[4]);
+    }
+    if(t_node->msg.data[5] > 0) {
+      exponential_average(2, t_node->msg.data[5]);
+    }
+    // update umax
+    umax = (uint8_t)round(((float)t_node->msg.data[8]*(ema_alpha)) + ((float)umax*(1.0-ema_alpha)));
+  }
+}
 
 void message_rx(message_t *msg, distance_measurement_t *d) {
   // if type 0 is either from ARGoS or ARK
@@ -336,61 +400,21 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     uint16_t id3 = msg->data[6] >> 1;
 
     if(id1 == kilo_uid) {
-      parse_smart_arena_data(msg->data, 0);
+      parse_smart_arena_message(msg->data, 0);
     } else if(id2 == kilo_uid) {
-      parse_smart_arena_data(msg->data, 1);
+      parse_smart_arena_message(msg->data, 1);
     } else if (id3 == kilo_uid) {
-      parse_smart_arena_data(msg->data, 2);
+      parse_smart_arena_message(msg->data, 2);
     }
-  } else if(msg->type==1) {
+  } else if(msg->type==1 && !to_parse_semaphore) {
     /* get id (always firt byte when coming from another kb) */
     uint8_t id = msg->data[0];
     // check that is a valid crc and another kb
     if(id!=kilo_uid){
-      /* ----------------------------------*/
-      /* KB interactive message            */
-      /* ----------------------------------*/
-
-
-      // store the message in the buffer for flooding and dm
-      // if not stored yet
-      if(b_head == NULL) {
-        // create the head of the list
-        b_head = malloc(sizeof(node_t));
-        // fill the new one
-        b_head->msg = *msg;
-        b_head->next = NULL;
-        b_head->time_stamp = kilo_ticks;
-        b_head->been_rebroadcasted = false;
-     } else {
-        // check if it has been parsed before
-        // avoid resending same messages over and over again
-        if(mtl_is_message_present(b_head, *msg)) {
-          // do not store
-          return;
-        }
-
-        // message is new, store it
-        node_t* new_node;
-        new_node = malloc(sizeof(node_t));
-        new_node->msg = *msg;
-        new_node->time_stamp=kilo_ticks;
-        new_node->been_rebroadcasted=false;
-        mtl_push_back(b_head, new_node);
-
-        // check received message and merge info and ema
-        if(msg->data[3] > 0) {
-          exponential_average(0, msg->data[3]);
-        }
-        if(msg->data[4] > 0) {
-          exponential_average(1, msg->data[4]);
-        }
-        if(msg->data[5] > 0) {
-          exponential_average(2, msg->data[5]);
-        }
-        // update umax
-        umax = (uint8_t)round(((float)msg->data[8]*(ema_alpha)) + ((float)umax*(1.0-ema_alpha)));
-      }
+      // store the message for later parsing to avoid the rx to interfer with the loop
+      to_parse_message = *msg;
+      // signal to the loop that we have a message to parse 
+      to_parse_semaphore = 1;
     }
 #ifndef ARGOS_simulator_BUILD
   } else if(msg->type == 2 && !release_the_broadcast) { // only used within ARK
@@ -414,8 +438,6 @@ void message_rx(message_t *msg, distance_measurement_t *d) {
     release_the_broadcast = 0;
     // set that is the first time that we received the signal to stop rebroadcast
     first_time_after_release = 1;
-    // turn of leds
-    set_color(RGB(0,0,0));
 #endif
   } else if(msg->type==120) {
     // kilobot signal id message (only used in ARK to avoid id assignment)
@@ -748,6 +770,8 @@ void setup() {
     resources_pops[i] = 0;
     real_quorum[i] = 255; // 255 means we still don't know which mechanism to use
   }
+  // reset seaphore
+  to_parse_semaphore = 0;
 }
 
 /*-------------------------------------------------------------------*/
@@ -805,8 +829,28 @@ void quorum_sensing() {
 
 /* Parse the decision and act accordingly */
 void update_led_status() {
+#ifdef ARGOS_simulator_BUILD
+  // in ARGoS a white led is used to signal quorum state
+  // in ARK, due to perceptions errors, this is avoided
+  if(current_decision_state == QUORUM_AREA_0 ||
+      current_decision_state == QUORUM_AREA_1 ||
+      current_decision_state == QUORUM_AREA_2) {
+    // white for quorum
+    set_color(RGB(3,3,3));
+  }
+#else
+  if(release_the_broadcast) {
+    // turn on leds for real quorum and debug
+    if(current_decision_state==0 || current_decision_state==3) 
+      set_color(RGB(3,0,0));
+    else if(current_decision_state==1 || current_decision_state==4) 
+      set_color(RGB(0,3,0));
+    else if(current_decision_state==2 || current_decision_state==5) 
+      set_color(RGB(0,0,3));
+  }
+#endif
   // if over the wanted resource turn on the right led color
-  if(current_decision_state == COMMITTED_AREA_0) {
+  else if(current_decision_state == COMMITTED_AREA_0) {
     // area 0 is red
     set_color(RGB(3,0,0));
   } else if(current_decision_state == COMMITTED_AREA_1) {
@@ -815,18 +859,7 @@ void update_led_status() {
   } else if(current_decision_state == COMMITTED_AREA_2) {
     // area 2 is blue
     set_color(RGB(0,0,3));
-  }
-#ifdef ARGOS_simulator_BUILD
-   // in ARGoS a white led is used to signal quorum state
-   // in ARK, due to perceptions errors, this is avoided
-   else if(current_decision_state == QUORUM_AREA_0 ||
-            current_decision_state == QUORUM_AREA_1 ||
-            current_decision_state == QUORUM_AREA_2) {
-    // white for quorum
-    set_color(RGB(3,3,3));
-  }
-#endif
-else {
+  } else {
     // simply continue as uncommitted and explore
     set_color(RGB(0,0,0));
   }
@@ -856,9 +889,6 @@ void send_own_state() {
       interactive_message.data[3+res_index] = resources_pops[res_index];
     }
 
-    // hops count
-    interactive_message.data[6] = 0;
-
     // last byte used for umax
     interactive_message.data[8] = umax;
 
@@ -873,38 +903,38 @@ void send_own_state() {
 
 /* Ask the kilobot to get a message to rebroadcast */
 void get_message_for_rebroadcast() {
-  // random prob of 20% of sending own message again
+  // random prob of ~20% of sending own message again
   // this cope with inefficient communication on the real kilobots
-  if(rand_soft() >= 204) {
+  if(rand_soft() < 50) {
     send_own_state();
     return;
   }
 
-  // -----------------------------
+  // avoid dangling pointer to freed memory
+  uint16_t last_rebroadcasted_time = last_rebroadcasted->time_stamp;
+
   // clean list (remove outdated messages)
   list_size = mtl_clean_old(&b_head, kilo_ticks-valid_until);
 
-  // get first not rebroadcasted message from flooding buffer
-  node_t* not_rebroadcasted = NULL;
-  not_rebroadcasted = mtl_get_first_not_rebroadcasted(b_head);
+  // check if we have last rebroadcasted and in case if it has been deleted by the clean old
+  if(!last_rebroadcasted || last_rebroadcasted_time < kilo_ticks-valid_until) {
+    last_rebroadcasted = mtl_get_first_not_rebroadcasted(b_head);
+  } else {
+    last_rebroadcasted = mtl_get_first_not_rebroadcasted(last_rebroadcasted);  
+  }
 
   // if there is a valid message then set it up for rebroadcast
-  if(not_rebroadcasted) {
+  if(last_rebroadcasted) {
+    // set it up for rebroadcast
+    interactive_message = last_rebroadcasted->msg;
     // update the rebroadcasted status in the message
-    not_rebroadcasted->been_rebroadcasted = true;
+    last_rebroadcasted->been_rebroadcasted = true;
     // tell that we have a msg to send
     to_send_message = true;
     // avoid rebroadcast to overwrite prev message
     sent_message = 0;
-    // set it up for rebroadcast
-    interactive_message.type = 1;
-    memcpy(interactive_message.data, not_rebroadcasted->msg.data, sizeof(uint8_t));
-    // update hops count for debug
-    interactive_message.data[6] = interactive_message.data[6]+1;
-    // compute crc again
-    interactive_message.crc = message_crc(&interactive_message);
-  }
 
+  }
 }
 
 void update_umax(decision_t temp_decision) {
@@ -926,6 +956,10 @@ void update_umax(decision_t temp_decision) {
 /* Main loop                                                         */
 /*-------------------------------------------------------------------*/
 void loop() {
+  // parse the received interactive message if any 
+  if(to_parse_semaphore) {
+    parse_interactive_message();
+  }
 #ifndef ARGOS_simulator_BUILD
 /*
  * if ARK is signaling to rebroacast, then the kilobots stops what they are doing and start rebroadcasting
@@ -941,14 +975,7 @@ void loop() {
 
     // stop moving
     set_motion(STOP);
-    // led of current status (used for debug and global quorum sensing)
-    if(current_decision_state == 0 || current_decision_state == 3) {
-      set_color(RGB(3,0,0));
-    } else if(current_decision_state == 1 || current_decision_state == 4) {
-      set_color(RGB(0,3,0));
-    } else if(current_decision_state == 2 || current_decision_state == 5) {
-      set_color(RGB(0,0,3));
-    }
+    update_led_status();
 
     // do not do anything else (freeze)
     return;
